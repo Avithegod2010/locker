@@ -1,0 +1,44 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_note"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_note"
+        android:shortcutShortLabel="@string/shortcut_new_note"
+        android:shortcutLongLabel="@string/shortcut_new_note">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="app.locker.vault"
+            android:targetClass="app.locker.vault.MainActivity">
+            <extra android:name="shortcut" android:value="new_note" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new_secret"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_secret"
+        android:shortcutShortLabel="@string/shortcut_new_secret"
+        android:shortcutLongLabel="@string/shortcut_new_secret">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="app.locker.vault"
+            android:targetClass="app.locker.vault.MainActivity">
+            <extra android:name="shortcut" android:value="new_secret" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="lock_vault"
+        android:enabled="true"
+        android:icon="@drawable/ic_tile_lock"
+        android:shortcutShortLabel="@string/shortcut_lock"
+        android:shortcutLongLabel="@string/shortcut_lock">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="app.locker.vault"
+            android:targetClass="app.locker.vault.MainActivity">
+            <extra android:name="shortcut" android:value="lock" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

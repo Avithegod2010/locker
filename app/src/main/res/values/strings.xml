@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Locker</string>
+    <string name="file_provider_authority" translatable="false">app.locker.vault.files</string>
+    <string name="tile_lock">Lock Locker</string>
+    <string name="shortcut_new_note">New note</string>
+    <string name="shortcut_new_secret">New secret</string>
+    <string name="shortcut_lock">Lock vault</string>
+    <string name="widget_name">Locker status</string>
+</resources>

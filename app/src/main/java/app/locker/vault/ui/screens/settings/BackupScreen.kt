@@ -1,5 +1,6 @@
 package app.locker.vault.ui.screens.settings
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,15 @@ import app.locker.vault.ui.theme.BrandBlue
 import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private fun lastBackupLabel(timestamp: Long): String {
+    if (timestamp <= 0L) return "No automatic snapshot yet"
+    val format = SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault())
+    return "Last snapshot: ${format.format(Date(timestamp))}"
+}
 
 @Composable
 fun BackupScreen(onBack: () -> Unit) {
@@ -72,6 +82,8 @@ fun BackupScreen(onBack: () -> Unit) {
     var restoreMode by remember { mutableStateOf(RestoreMode.MERGE) }
     var showReplaceConfirm by remember { mutableStateOf(false) }
     var lastSummary by remember { mutableStateOf<BackupSummary?>(null) }
+    val settings by app.preferences.settings.collectAsStateWithLifecycle()
+    var showKeep by remember { mutableStateOf(false) }
 
     val createLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -110,6 +122,21 @@ fun BackupScreen(onBack: () -> Unit) {
         showRestorePassword = true
     }
 
+    val treeLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        app.session.endExternalActivity()
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        app.preferences.setAutoBackupTreeUri(uri.toString())
+        app.preferences.setAutoBackupEnabled(true)
+    }
+
     SettingsScaffold(title = "Backup & restore", onBack = onBack) {
         Spacer(Modifier.height(6.dp))
         InfoBanner(
@@ -130,6 +157,87 @@ fun BackupScreen(onBack: () -> Unit) {
                     createPassword = ""
                     createConfirm = ""
                     showCreateDialog = true
+                }
+            )
+        }
+
+        SettingsSectionTitle("Daily snapshots")
+        InfoBanner(
+            icon = Icons.Rounded.CloudOff,
+            tint = BrandMint,
+            title = "Automatic, still offline",
+            text = "Locker writes one encrypted .locker snapshot per day into the folder you choose — only after you unlock with your password. Snapshots use that same password, and older ones beyond the keep limit are removed."
+        )
+        Spacer(Modifier.height(10.dp))
+        SettingsGroup {
+            SettingSwitchRow(
+                icon = Icons.Rounded.Archive,
+                tint = BrandBlue,
+                title = "Daily automatic backup",
+                subtitle = "Runs on the next password unlock when a day has passed.",
+                checked = settings.autoBackupEnabled,
+                onCheckedChange = { enabled ->
+                    if (enabled && settings.autoBackupTreeUri.isBlank()) {
+                        app.session.beginExternalActivity()
+                        treeLauncher.launch(null)
+                    } else {
+                        app.preferences.setAutoBackupEnabled(enabled)
+                    }
+                }
+            )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.CheckCircle,
+                tint = BrandMint,
+                title = "Backup folder",
+                subtitle = "Where automatic snapshots are written.",
+                value = if (settings.autoBackupTreeUri.isBlank()) "Not chosen" else "Selected",
+                onClick = {
+                    app.session.beginExternalActivity()
+                    treeLauncher.launch(null)
+                }
+            )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.Restore,
+                tint = BrandViolet,
+                title = "Snapshots to keep",
+                subtitle = lastBackupLabel(settings.autoBackupLastAt),
+                value = "${settings.autoBackupKeep}",
+                onClick = { showKeep = true }
+            )
+        }
+
+        if (showKeep) {
+            AlertDialog(
+                onDismissRequest = { showKeep = false },
+                title = { Text("Snapshots to keep") },
+                text = {
+                    Column {
+                        listOf(3, 5, 10).forEach { count ->
+                            Surface(
+                                onClick = {
+                                    app.preferences.setAutoBackupKeep(count)
+                                    showKeep = false
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp)
+                            ) {
+                                Text(
+                                    "$count snapshots",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showKeep = false }) { Text("Close") }
                 }
             )
         }

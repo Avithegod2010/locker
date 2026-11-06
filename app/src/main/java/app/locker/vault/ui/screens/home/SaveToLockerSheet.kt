@@ -17,9 +17,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,7 +47,7 @@ import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
 
 enum class AddKind {
-    PHOTO, FILE, NOTE, THING, SECRET
+    PHOTO, FILE, NOTE, THING, SECRET, VOICE, SCAN
 }
 
 private data class AddOption(
@@ -61,7 +63,9 @@ private val options = listOf(
     AddOption(AddKind.FILE, "File", "Upload important documents safely.", Icons.Rounded.Description, BrandBlue),
     AddOption(AddKind.NOTE, "Note", "Write down thoughts and instructions.", Icons.Rounded.StickyNote2, BrandAmber),
     AddOption(AddKind.THING, "Thing", "Save locations of real-world items.", Icons.Rounded.Work, BrandBlue),
-    AddOption(AddKind.SECRET, "Secret", "Preserve account credentials.", Icons.Rounded.Lock, BrandViolet)
+    AddOption(AddKind.SECRET, "Secret", "Preserve account credentials.", Icons.Rounded.Lock, BrandViolet),
+    AddOption(AddKind.VOICE, "Voice memo", "Record an encrypted audio note.", Icons.Rounded.Mic, BrandViolet),
+    AddOption(AddKind.SCAN, "Scan document", "Photograph pages into one encrypted PDF.", Icons.Rounded.CropFree, BrandMint)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

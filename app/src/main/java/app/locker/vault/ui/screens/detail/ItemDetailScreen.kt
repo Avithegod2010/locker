@@ -401,25 +401,29 @@ fun ItemDetailScreen(
                         android.widget.Toast.makeText(context, "$label copied", android.widget.Toast.LENGTH_SHORT).show()
                     })
 
-                    VaultType.FILE, VaultType.PHOTO -> FileDetail(
-                        item = item,
-                        preview = photoPreview,
-                        onOpen = {
-                            when {
-                                item.isVideo -> onViewVideo(item)
-                                item.isPdf -> onViewPdf(item)
-                                item.isImage -> onViewPhoto(item)
-                                else -> openFile()
+                    VaultType.FILE, VaultType.PHOTO, VaultType.VIDEO -> if (item.isAudio) {
+                        AudioDetail(item = item)
+                    } else {
+                        FileDetail(
+                            item = item,
+                            preview = photoPreview,
+                            onOpen = {
+                                when {
+                                    item.isVideo -> onViewVideo(item)
+                                    item.isPdf -> onViewPdf(item)
+                                    item.isImage -> onViewPhoto(item)
+                                    else -> openFile()
+                                }
+                            },
+                            onShare = { confirmShare = true },
+                            onExport = {
+                                app.session.beginExternalActivity()
+                                exportLauncher.launch(
+                                    item.fileName.ifBlank { "${item.title}.bin" }
+                                )
                             }
-                        },
-                        onShare = { confirmShare = true },
-                        onExport = {
-                            app.session.beginExternalActivity()
-                            exportLauncher.launch(
-                                item.fileName.ifBlank { "${item.title}.bin" }
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
 
                 if (itemCollections.isNotEmpty()) {

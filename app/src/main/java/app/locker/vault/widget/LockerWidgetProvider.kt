@@ -29,6 +29,14 @@ class LockerWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_open, openIntent(context))
             views.setOnClickPendingIntent(R.id.widget_lock, lockIntent(context))
+            views.setOnClickPendingIntent(
+                R.id.widget_note,
+                shortcutIntent(context, "new_note", 12)
+            )
+            views.setOnClickPendingIntent(
+                R.id.widget_camera,
+                shortcutIntent(context, "new_photo", 13)
+            )
             appWidgetManager.updateAppWidget(id, views)
         }
     }
@@ -58,6 +66,18 @@ class LockerWidgetProvider : AppWidgetProvider() {
             context,
             11,
             Intent(context, LockerWidgetProvider::class.java).setAction(ACTION_LOCK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    private fun shortcutIntent(
+        context: Context,
+        shortcut: String,
+        requestCode: Int
+    ): PendingIntent =
+        PendingIntent.getActivity(
+            context,
+            requestCode,
+            Intent(context, MainActivity::class.java).putExtra("shortcut", shortcut),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

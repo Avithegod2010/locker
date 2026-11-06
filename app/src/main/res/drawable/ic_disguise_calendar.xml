@@ -4,23 +4,29 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Hanger rings -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M39,20 H44 A2,2 0 0 1 46,22 V33 H37 V22 A2,2 0 0 1 39,20 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M64,20 H69 A2,2 0 0 1 71,22 V33 H62 V22 A2,2 0 0 1 64,20 Z" />
     <!-- Calendar body -->
     <path
-        android:fillColor="#16303F"
-        android:strokeColor="#47B8E0"
-        android:strokeWidth="2.2"
-        android:pathData="M30,32 h48 a8,8 0 0,1 8,8 v36 a8,8 0 0,1 -8,8 h-48 a8,8 0 0,1 -8,-8 v-36 a8,8 0 0,1 8,-8 Z" />
-    <!-- Hanger rings -->
-    <path android:fillColor="#6CC6E8" android:pathData="M40,26 h4.4 v12 h-4.4 Z" />
-    <path android:fillColor="#6CC6E8" android:pathData="M63.6,26 h4.4 v12 h-4.4 Z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="5.5"
+        android:pathData="M41,28 H67 A10,10 0 0 1 77,38 V74 A10,10 0 0 1 67,84 H41 A10,10 0 0 1 31,74 V38 A10,10 0 0 1 41,28 Z" />
     <!-- Header band -->
-    <path android:fillColor="#57D9A3" android:pathData="M26,40 h56 v8 h-56 Z" />
-    <!-- Date grid -->
-    <path android:fillColor="#6CC6E8" android:pathData="M33,54 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
-    <path android:fillColor="#6CC6E8" android:pathData="M45,54 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
-    <path android:fillColor="#B7E7F7" android:pathData="M57,54 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
-    <path android:fillColor="#6CC6E8" android:pathData="M69,54 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
-    <path android:fillColor="#6CC6E8" android:pathData="M33,66 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
-    <path android:fillColor="#6CC6E8" android:pathData="M45,66 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
-    <path android:fillColor="#6CC6E8" android:pathData="M57,66 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M31,42 H77 V47 H31 Z" />
+    <!-- Day dots -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M41,58 A3,3 0 1 1 40.9,58 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54,58 A3,3 0 1 1 53.9,58 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M67,58 A3,3 0 1 1 66.9,58 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M41,70 A3,3 0 1 1 40.9,70 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54,70 A3,3 0 1 1 53.9,70 Z" />
 </vector>

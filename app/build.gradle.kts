@@ -32,8 +32,8 @@ android {
         applicationId = "app.locker.vault"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -114,6 +114,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
     implementation("androidx.camera:camera-video:1.4.1")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.exifinterface:exifinterface:1.3.7")

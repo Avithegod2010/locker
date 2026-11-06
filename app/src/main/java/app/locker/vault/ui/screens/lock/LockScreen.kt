@@ -136,6 +136,7 @@ fun LockScreen() {
         scope.launch {
             when (val result = app.session.unlockWithPassword(password.toCharArray())) {
                 is UnlockResult.Success -> password = ""
+                is UnlockResult.DuressUnlocked -> password = ""
                 is UnlockResult.WrongCredentials -> {
                     loading = false
                     password = ""
@@ -499,6 +500,10 @@ fun LockScreen() {
                                 is UnlockResult.WrongCredentials -> {
                                     recoveryLoading = false
                                     recoveryError = "That key doesn't match this vault."
+                                }
+                                is UnlockResult.DuressUnlocked -> {
+                                    recoveryLoading = false
+                                    recoveryOpen = false
                                 }
                             }
                         }

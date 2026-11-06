@@ -20,6 +20,8 @@ import app.locker.vault.ui.screens.collections.CollectionsScreen
 import app.locker.vault.ui.screens.camera.SecureCameraScreen
 import app.locker.vault.ui.screens.detail.ItemDetailScreen
 import app.locker.vault.ui.screens.editor.ImportScreen
+import app.locker.vault.ui.screens.scanner.DocumentScannerScreen
+import app.locker.vault.ui.screens.recorder.VoiceRecorderScreen
 import app.locker.vault.ui.screens.editor.ImageEditorScreen
 import app.locker.vault.ui.screens.editor.TextEditorScreen
 import app.locker.vault.ui.screens.home.HomeScreen
@@ -75,7 +77,8 @@ fun LockerNavHost() {
             CollectionDetailScreen(
                 collectionId = id,
                 onBack = { navController.popBackStack() },
-                onOpenItem = { itemId -> navController.navigate(Routes.item(itemId)) }
+                onOpenItem = { itemId -> navController.navigate(Routes.item(itemId)) },
+                onOpenCollection = { childId -> navController.navigate("collection/$childId") }
             )
         }
         composable(Routes.TRASH) {
@@ -133,6 +136,12 @@ fun LockerNavHost() {
         }
         composable(Routes.CAMERA) {
             SecureCameraScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.RECORDER) {
+            VoiceRecorderScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SCANNER) {
+            DocumentScannerScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.SLIDESHOW) {
             SlideshowScreen(onBack = { navController.popBackStack() })

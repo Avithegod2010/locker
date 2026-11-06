@@ -22,6 +22,7 @@ enum class SessionState {
 
 sealed interface UnlockResult {
     data object Success : UnlockResult
+    data object DuressUnlocked : UnlockResult
     data object WrongCredentials : UnlockResult
     data object InvalidRecoveryKey : UnlockResult
     data class Failure(val message: String) : UnlockResult
@@ -62,6 +63,15 @@ class SessionManager(
 
     /** Wired by the app container to purge decrypted metadata from memory on lock. */
     var onLocked: (() -> Unit)? = null
+
+    /** Wired by the app container to destroy every trace of the real vault on duress. */
+    var onDuressWipe: (suspend () -> Unit)? = null
+
+    /** Wired by the app container to seed the fresh decoy vault with innocuous content. */
+    var onDecoyReady: (suspend () -> Unit)? = null
+
+    /** Kept for a short time after a password unlock so an automatic backup can run. */
+    private var unlockPasswordCopy: CharArray? = null
 
     /**
      * Returns a defensive copy. Long-running writes must never hold the live session array,
@@ -106,13 +116,21 @@ class SessionManager(
         preferences.setFailedAttempts(attempt)
         try {
             val unwrapped = keyMaterialStore.unwrapWithPassword(password)
-                ?: return@withContext registerFailure(attempt)
+            if (unwrapped == null) {
+                if (matchesDuressPassword(password)) {
+                    failedAttempts = 0
+                    preferences.setFailedAttempts(0)
+                    return@withContext performDuressUnlock(password)
+                }
+                return@withContext registerFailure(attempt)
+            }
             if (lockEpoch != epoch) {
                 Crypto.wipe(unwrapped)
                 failedAttempts = 0
                 preferences.setFailedAttempts(0)
                 return@withContext UnlockResult.Failure("Vault locked during unlock")
             }
+            rememberPasswordForBackup(password)
             completeUnlock(unwrapped, viaRecovery = false)
             UnlockResult.Success
         } catch (t: Throwable) {
@@ -122,8 +140,7 @@ class SessionManager(
         }
     }
 
-    suspend fun unlockWithRecovery(input: String): UnlockResult = withContext(Dispatchers.Default) {
-        val epoch = lockEpoch
+    suspend fun unlockWithRecovery(input: String): UnlockResult = withContext(Dispatchers.Default) {        val epoch = lockEpoch
         try {
             val unwrapped = keyMaterialStore.unwrapWithRecovery(input)
                 ?: return@withContext UnlockResult.InvalidRecoveryKey
@@ -137,6 +154,109 @@ class SessionManager(
         } catch (t: Throwable) {
             UnlockResult.Failure(t.message ?: "Could not verify recovery key")
         }
+    }
+
+    // --- Duress / decoy vault -------------------------------------------------
+
+    fun hasDuressPassword(): Boolean =
+        preferences.settings.value.duressVerifier.isNotBlank()
+
+    suspend fun setDuressPassword(password: CharArray): Result<Unit> = withContext(Dispatchers.Default) {
+        try {
+            runCatching {
+                if (masterKey == null) error("Unlock the vault first")
+                if (password.size < 10) {
+                    error("Use at least 10 characters for the duress password")
+                }
+                val salt = Crypto.randomBytes(Crypto.SALT_BYTES)
+                val key = Crypto.deriveKey(password, salt, Crypto.currentKdfParams)
+                val verifier = try {
+                    Crypto.sha256(key)
+                } finally {
+                    Crypto.wipe(key)
+                }
+                preferences.setDuressCredentials(
+                    Crypto.b64encode(salt),
+                    Crypto.b64encode(verifier)
+                )
+                Crypto.wipe(verifier)
+            }
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
+    fun clearDuressPassword() = preferences.clearDuressCredentials()
+
+    private fun matchesDuressPassword(password: CharArray): Boolean {
+        val settings = preferences.settings.value
+        if (settings.duressVerifier.isBlank() || settings.duressSalt.isBlank()) return false
+        val salt = Crypto.b64decode(settings.duressSalt) ?: return false
+        val expected = Crypto.b64decode(settings.duressVerifier) ?: return false
+        return try {
+            val key = Crypto.deriveKey(password, salt, Crypto.currentKdfParams)
+            val actual = try {
+                Crypto.sha256(key)
+            } finally {
+                Crypto.wipe(key)
+            }
+            try {
+                actual.size == expected.size && actual.indices.all { actual[it] == expected[it] }
+            } finally {
+                Crypto.wipe(actual)
+                Crypto.wipe(expected)
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Destroys the real vault and immediately creates a fresh decoy vault protected by the
+     * same password that was just typed. The decoy never contains any original data.
+     */
+    private suspend fun performDuressUnlock(password: CharArray): UnlockResult {
+        val wipe = onDuressWipe
+            ?: return UnlockResult.Failure("Duress reset is unavailable")
+        return try {
+            wipe()
+            val created = keyMaterialStore.createVault(password)
+            masterKey?.fill(0)
+            masterKey = created.masterKey
+            _pendingRecoveryCode.value = null
+            failedAttempts = 0
+            preferences.setFailedAttempts(0)
+            preferences.setBiometricEnabled(false)
+            preferences.setRecoveryUsed(false)
+            _state.value = SessionState.UNLOCKED
+            runCatching { onVaultCreated?.invoke() }
+            runCatching { onDecoyReady?.invoke() }
+            UnlockResult.DuressUnlocked
+        } catch (t: Throwable) {
+            UnlockResult.Failure(t.message ?: "Duress reset failed")
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
+    private fun rememberPasswordForBackup(password: CharArray) {
+        unlockPasswordCopy?.fill('\u0000')
+        unlockPasswordCopy = password.copyOf()
+        scope.launch {
+            delay(5 * 60 * 1000L)
+            unlockPasswordCopy?.fill('\u0000')
+            unlockPasswordCopy = null
+        }
+    }
+
+    /**
+     * Hands the transient password copy to the automatic backup runner and forgets it.
+     * Returns null when no password is available (for example after a biometric unlock).
+     */
+    fun takeUnlockPasswordForBackup(): CharArray? {
+        val copy = unlockPasswordCopy
+        unlockPasswordCopy = null
+        return copy
     }
 
     fun prepareBiometricEnrollmentCipher(): Cipher = biometricKeyStore.createEnrollmentCipher()
@@ -240,6 +360,8 @@ class SessionManager(
         lockEpoch++
         masterKey?.fill(0)
         masterKey = null
+        unlockPasswordCopy?.fill('\u0000')
+        unlockPasswordCopy = null
         _pendingRecoveryCode.value = null
         scope.launch(Dispatchers.IO) {
             runCatching { fileStore.clearSensitiveCaches() }
@@ -313,6 +435,8 @@ class SessionManager(
         lockEpoch++
         masterKey?.fill(0)
         masterKey = null
+        unlockPasswordCopy?.fill('\u0000')
+        unlockPasswordCopy = null
         _pendingRecoveryCode.value = null
         failedAttempts = 0
         preferences.setFailedAttempts(0)

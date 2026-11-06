@@ -4,47 +4,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Vault door plate -->
+    <!-- Shackle -->
     <path
-        android:fillColor="#16303F"
-        android:strokeColor="#47B8E0"
-        android:strokeWidth="2.6"
-        android:pathData="M54,28.2 a25.8,25.8 0 1,1 -0.01,0 Z" />
-    <!-- Inner mechanism disc -->
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="8"
+        android:pathData="M40,50 V38 C40,29 46,23 54,23 C62,23 68,29 68,38 V50" />
+    <!-- Body -->
     <path
-        android:fillColor="#0D1D2B"
-        android:strokeColor="#2F6C8F"
-        android:strokeWidth="1.6"
-        android:pathData="M54,37.2 a16.8,16.8 0 1,1 -0.01,0 Z" />
-    <!-- Spoke wheel -->
-    <group android:pivotX="54" android:pivotY="54" android:rotation="0">
-        <path
-            android:fillColor="#6CC6E8"
-            android:pathData="M52.3,40.2 h3.4 v11 h-3.4 Z" />
-    </group>
-    <group android:pivotX="54" android:pivotY="54" android:rotation="90">
-        <path
-            android:fillColor="#6CC6E8"
-            android:pathData="M52.3,40.2 h3.4 v11 h-3.4 Z" />
-    </group>
-    <group android:pivotX="54" android:pivotY="54" android:rotation="180">
-        <path
-            android:fillColor="#6CC6E8"
-            android:pathData="M52.3,40.2 h3.4 v11 h-3.4 Z" />
-    </group>
-    <group android:pivotX="54" android:pivotY="54" android:rotation="270">
-        <path
-            android:fillColor="#6CC6E8"
-            android:pathData="M52.3,40.2 h3.4 v11 h-3.4 Z" />
-    </group>
-    <!-- Hub with keyhole -->
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="8"
+        android:pathData="M41,47 H67 A10,10 0 0 1 77,57 V79 A10,10 0 0 1 67,89 H41 A10,10 0 0 1 31,79 V57 A10,10 0 0 1 41,47 Z" />
+    <!-- Keyhole -->
     <path
-        android:fillColor="#57D9A3"
-        android:pathData="M54,50.4 a3.6,3.6 0 1,1 -0.01,0 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,58.5 A5,5 0 1 1 53.9,58.5 Z" />
     <path
-        android:fillColor="#0D1D2B"
-        android:pathData="M54,52.2 a1.8,1.8 0 1,1 -0.01,0 Z" />
-    <path
-        android:fillColor="#0D1D2B"
-        android:pathData="M53.2,54 h1.6 v3.4 h-1.6 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M52.6,62 H55.4 V72 A1.4,1.4 0 0 1 52.6,72 Z" />
 </vector>

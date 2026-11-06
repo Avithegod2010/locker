@@ -179,7 +179,8 @@ class VaultRepository(
                     itemId = id,
                     mimeType = info.mimeType,
                     masterKey = key,
-                    generateThumbnail = info.mimeType.startsWith("image/")
+                    generateThumbnail = info.mimeType.startsWith("image/") ||
+                        info.mimeType.startsWith("video/")
                 )
                 val ocrText = appContext.let { context ->
                     app.locker.vault.core.Ocr.recognize(context, uri, info.mimeType).orEmpty()
@@ -509,12 +510,17 @@ class VaultRepository(
         }
     }
 
-    suspend fun addCollection(name: String, color: Long, icon: String): Result<VaultCollection> = runCatching {
+    suspend fun addCollection(
+        name: String,
+        color: Long,
+        icon: String,
+        parentId: String = ""
+    ): Result<VaultCollection> = runCatching {
         withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
             try {
                 writeMutex.withLock {
-                    val collection = addCollectionLocked(key, name.trim(), color, icon)
+                    val collection = addCollectionLocked(key, name.trim(), color, icon, parentId)
                     reload(key)
                     collection
                 }
@@ -533,6 +539,42 @@ class VaultRepository(
                         collection.id,
                         collection.createdAt,
                         Crypto.encrypt(key, encodeCollection(collection), collectionAad(collection.id))
+                    )
+                    reload(key)
+                }
+            } finally {
+                Crypto.wipe(key)
+            }
+        }
+    }
+
+    /** Moves a collection under another one, refusing cycles. */
+    suspend fun setCollectionParent(collectionId: String, parentId: String): Result<Unit> = runCatching {
+        withContext(Dispatchers.IO) {
+            val key = session.requireMasterKey()
+            try {
+                writeMutex.withLock {
+                    val collections = _collections.value
+                    val target = collections.firstOrNull { it.id == collectionId }
+                        ?: error("Collection no longer exists")
+                    val descendants = mutableSetOf<String>()
+                    fun collect(id: String) {
+                        collections.filter { it.parentId == id }.forEach { child ->
+                            if (descendants.add(child.id)) collect(child.id)
+                        }
+                    }
+                    collect(collectionId)
+                    if (parentId == collectionId || parentId in descendants) {
+                        error("A collection cannot be moved inside itself")
+                    }
+                    db.insertCollection(
+                        collectionId,
+                        target.createdAt,
+                        Crypto.encrypt(
+                            key,
+                            encodeCollection(target.copy(parentId = parentId)),
+                            collectionAad(collectionId)
+                        )
                     )
                     reload(key)
                 }
@@ -561,6 +603,23 @@ class VaultRepository(
                         }
                     }
                     db.deleteCollection(collectionId)
+                    // Nested collections must not disappear with their parent.
+                    val removed = _collections.value.firstOrNull { it.id == collectionId }
+                    if (removed != null) {
+                        _collections.value
+                            .filter { it.parentId == collectionId }
+                            .forEach { child ->
+                                db.insertCollection(
+                                    child.id,
+                                    child.createdAt,
+                                    Crypto.encrypt(
+                                        key,
+                                        encodeCollection(child.copy(parentId = removed.parentId)),
+                                        collectionAad(child.id)
+                                    )
+                                )
+                            }
+                    }
                     reload(key)
                 }
             } finally {
@@ -765,13 +824,15 @@ class VaultRepository(
         key: ByteArray,
         name: String,
         color: Long,
-        icon: String
+        icon: String,
+        parentId: String = ""
     ): VaultCollection {
         val collection = VaultCollection(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Collection" },
             color = color,
-            icon = icon
+            icon = icon,
+            parentId = parentId
         )
         db.insertCollection(
             collection.id,
@@ -865,6 +926,7 @@ class VaultRepository(
                 name = json.optString("name"),
                 color = json.optLong("color", 0xFF5B9CFF),
                 icon = json.optString("icon", "folder"),
+                parentId = json.optString("parentId", ""),
                 createdAt = row.createdAt
             )
         } catch (_: Exception) {
@@ -932,6 +994,7 @@ class VaultRepository(
             .put("name", collection.name)
             .put("color", collection.color)
             .put("icon", collection.icon)
+            .put("parentId", collection.parentId)
             .toString()
             .toByteArray(Charsets.UTF_8)
 
@@ -957,5 +1020,6 @@ class VaultRepository(
         VaultType.THING -> "Untitled thing"
         VaultType.FILE -> "Untitled file"
         VaultType.PHOTO -> "Untitled photo"
+        VaultType.VIDEO -> "Untitled video"
     }
 }

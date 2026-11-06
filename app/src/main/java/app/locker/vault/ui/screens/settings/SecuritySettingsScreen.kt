@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -103,6 +104,11 @@ fun SecuritySettingsScreen(
     var showRecoveryKey by remember { mutableStateOf(false) }
     var recoveryKeyText by remember { mutableStateOf<String?>(null) }
     var showDisguise by remember { mutableStateOf(false) }
+    var showCalculatorCode by remember { mutableStateOf(false) }
+    var showDuress by remember { mutableStateOf(false) }
+    var calculatorCode by remember { mutableStateOf("") }
+    var duressPassword by remember { mutableStateOf("") }
+    var duressConfirm by remember { mutableStateOf("") }
 
     val biometricAvailable = remember { app.biometricKeyStore.canAuthenticate() }
     val autoLockOptions = listOf(
@@ -309,6 +315,59 @@ fun SecuritySettingsScreen(
                 value = DisguiseManager.labelFor(settings.disguiseMode),
                 onClick = { showDisguise = true }
             )
+            if (settings.disguiseMode == DisguiseManager.ID_CALCULATOR) {
+                RowDivider()
+                SettingRow(
+                    icon = Icons.Rounded.Calculate,
+                    tint = BrandBlue,
+                    title = "Calculator unlock code",
+                    subtitle = "Type this code, then press =, to reach the lock screen.",
+                    value = if (app.preferences.hasCustomCalculatorCode()) "Custom" else "1234",
+                    onClick = {
+                        calculatorCode = ""
+                        showCalculatorCode = true
+                    }
+                )
+            }
+        }
+
+        SettingsSectionTitle("Duress")
+        InfoBanner(
+            icon = Icons.Rounded.Shield,
+            tint = BrandCoral,
+            title = "A second password with a catch",
+            text = "If you are ever forced to unlock, entering the duress password erases the real vault permanently and opens a fresh decoy vault containing harmless example notes. There is no undo, so only set one you will never type by accident."
+        )
+        Spacer(Modifier.height(10.dp))
+        SettingsGroup {
+            SettingRow(
+                icon = Icons.Rounded.Key,
+                tint = BrandCoral,
+                title = "Duress password",
+                subtitle = "Erases everything, then opens a clean decoy vault.",
+                value = if (settings.duressVerifier.isNotBlank()) "On" else "Off",
+                onClick = {
+                    duressPassword = ""
+                    duressConfirm = ""
+                    showDuress = true
+                }
+            )
+            if (settings.duressVerifier.isNotBlank()) {
+                RowDivider()
+                SettingRow(
+                    icon = Icons.Rounded.Key,
+                    tint = BrandMint,
+                    title = "Remove duress password",
+                    onClick = {
+                        app.session.clearDuressPassword()
+                        android.widget.Toast.makeText(
+                            context,
+                            "Duress password removed",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
+            }
         }
 
         SettingsSectionTitle("Locking")
@@ -479,6 +538,130 @@ fun SecuritySettingsScreen(
                 DisguiseManager.apply(context, id)
             },
             onDismiss = { showDisguise = false }
+        )
+    }
+
+    if (showCalculatorCode) {
+        AlertDialog(
+            onDismissRequest = { showCalculatorCode = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Calculator unlock code") },
+            text = {
+                Column {
+                    Text(
+                        "Type this code inside the calculator and press =. It only reveals Locker's lock screen — your vault password is still required.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    LockerTextField(
+                        value = calculatorCode,
+                        onValueChange = { calculatorCode = it.filter(Char::isDigit).take(8) },
+                        placeholder = "4–8 digits",
+                        label = "Unlock code",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        isSensitive = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (calculatorCode.length !in 4..8) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Use 4–8 digits",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        app.preferences.setCalculatorCode(calculatorCode)
+                        calculatorCode = ""
+                        showCalculatorCode = false
+                        android.widget.Toast.makeText(
+                            context,
+                            "Calculator code saved",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCalculatorCode = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDuress) {
+        AlertDialog(
+            onDismissRequest = { showDuress = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Set duress password") },
+            text = {
+                Column {
+                    Text(
+                        "Entering this password on the lock screen permanently erases the real vault and opens a fresh decoy vault with harmless example entries. This cannot be undone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    LockerTextField(
+                        value = duressPassword,
+                        onValueChange = { duressPassword = it },
+                        placeholder = "At least 10 characters",
+                        label = "Duress password",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = PasswordVisualTransformation(),
+                        isSensitive = true
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LockerTextField(
+                        value = duressConfirm,
+                        onValueChange = { duressConfirm = it },
+                        placeholder = "Repeat password",
+                        label = "Confirm",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = PasswordVisualTransformation(),
+                        isSensitive = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when {
+                        duressPassword.length < 10 -> android.widget.Toast.makeText(
+                            context,
+                            "Use at least 10 characters",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        duressPassword != duressConfirm -> android.widget.Toast.makeText(
+                            context,
+                            "Passwords don't match",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        else -> {
+                            showDuress = false
+                            val value = duressPassword
+                            duressPassword = ""
+                            duressConfirm = ""
+                            scope.launch {
+                                val result = app.session.setDuressPassword(value.toCharArray())
+                                android.widget.Toast.makeText(
+                                    context,
+                                    result.fold(
+                                        { "Duress password set" },
+                                        { it.message ?: "Could not set duress password" }
+                                    ),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }) { Text("Set password", color = BrandCoral) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDuress = false }) { Text("Cancel") }
+            }
         )
     }
 

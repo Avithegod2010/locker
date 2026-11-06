@@ -38,6 +38,7 @@ class AppContainer(context: Context) {
     val biometricKeyStore = BiometricKeyStore(appContext)
     val fileStore = EncryptedFileStore(appContext)
     val secureClipboard = SecureClipboard(appContext, appScope)
+    val playback = app.locker.vault.core.PlaybackMemory(appContext)
 
     /** Content sent to Locker through the Android share sheet, waiting for the UI. */
     val pendingShare = MutableStateFlow<app.locker.vault.core.SharedContent?>(null)
@@ -47,6 +48,9 @@ class AppContainer(context: Context) {
 
     /** A shortcut route to open once the vault is unlocked. */
     val pendingRoute = MutableStateFlow<String?>(null)
+
+    /** A search query handed to the home screen (smart folders). */
+    val pendingSearch = MutableStateFlow<String?>(null)
 
     private val db = VaultDb(appContext)
     val database: VaultDb get() = db
@@ -71,6 +75,12 @@ class AppContainer(context: Context) {
         repository = repository,
         session = session
     )
+    val autoBackup = app.locker.vault.core.AutoBackupRunner(
+        context = appContext,
+        preferences = preferences,
+        backupManager = backupManager,
+        session = session
+    )
 
     init {
         session.onVaultCreated = {
@@ -84,6 +94,39 @@ class AppContainer(context: Context) {
             ThumbnailCache.clear()
             secureClipboard.clear()
         }
+        session.onDuressWipe = {
+            repository.wipeAllData()
+            biometricKeyStore.deleteKey()
+            keyMaterialStore.wipe()
+            playback.clearAll()
+            ThumbnailCache.clear()
+            secureClipboard.clear()
+            preferences.reset()
+        }
+        session.onDecoyReady = {
+            seedDecoyVault()
+        }
+    }
+
+    /** Harmless starter content for a freshly created decoy vault. */
+    private suspend fun seedDecoyVault() {
+        repository.createTextItem(
+            type = app.locker.vault.data.VaultType.NOTE,
+            title = "Grocery list",
+            body = "Milk\nEggs\nBread\nCoffee beans\nLaundry detergent"
+        )
+        repository.createTextItem(
+            type = app.locker.vault.data.VaultType.NOTE,
+            title = "Warranty receipts",
+            body = "Laptop — bought last spring, 2-year cover\nHeadphones — 1-year cover\nKeep receipts in the desk drawer."
+        )
+        repository.createTextItem(
+            type = app.locker.vault.data.VaultType.SECRET,
+            title = "Home Wi-Fi",
+            username = "home",
+            password = "sunflower-2021",
+            website = "192.168.1.1"
+        )
     }
 
     suspend fun wipeVault() {

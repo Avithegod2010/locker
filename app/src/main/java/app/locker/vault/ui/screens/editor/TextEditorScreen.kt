@@ -144,7 +144,7 @@ fun TextEditorScreen(
         VaultType.SECRET -> title.isNotBlank()
         VaultType.NOTE -> body.isNotBlank()
         VaultType.THING -> title.isNotBlank()
-        VaultType.FILE, VaultType.PHOTO -> title.isNotBlank()
+        VaultType.FILE, VaultType.PHOTO, VaultType.VIDEO -> title.isNotBlank()
     }
 
     fun save() {
@@ -207,7 +207,7 @@ fun TextEditorScreen(
     ) {
         Spacer(Modifier.height(14.dp))
 
-        if (effectiveType == VaultType.FILE || effectiveType == VaultType.PHOTO) {
+        if (effectiveType == VaultType.FILE || effectiveType == VaultType.PHOTO || effectiveType == VaultType.VIDEO) {
             if (existing != null) {
                 FileSummaryCard(item = existing)
                 Spacer(Modifier.height(20.dp))
@@ -215,7 +215,11 @@ fun TextEditorScreen(
             LockerTextField(
                 value = title,
                 onValueChange = { title = it; error = null },
-                placeholder = if (effectiveType == VaultType.PHOTO) "Photo title" else "File title",
+                placeholder = when (effectiveType) {
+                    VaultType.PHOTO -> "Photo title"
+                    VaultType.VIDEO -> "Video title"
+                    else -> "File title"
+                },
                 label = "Title",
                 required = true
             )

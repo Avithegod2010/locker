@@ -1,7 +1,14 @@
 package app.locker.vault.data
 
+import android.util.Xml
+import org.json.JSONArray
+import org.json.JSONObject
+import org.xmlpull.v1.XmlPullParser
+import java.io.StringReader
+import java.util.zip.ZipInputStream
+
 /**
- * Offline CSV importer for exports from other password managers. Parsing is fully local:
+ * Offline importer for exports from other password managers. Parsing is fully local:
  * the file the user picks through the system document picker is read, parsed in memory, and
  * every row is turned into an encrypted Secret. Nothing is uploaded anywhere.
  */
@@ -26,6 +33,168 @@ object PasswordImport {
     )
 
     class Unrecognized(val reason: String) : Exception(reason)
+
+    /** Parses CSV, KeePass XML, or a 1Password .1pux (ZIP) export. */
+    fun parseBytes(bytes: ByteArray): Parsed {
+        if (bytes.size >= 4 &&
+            bytes[0] == 0x50.toByte() &&
+            bytes[1] == 0x4B.toByte()
+        ) {
+            return parse1Pux(bytes)
+        }
+        val text = bytes.toString(Charsets.UTF_8).trimStart('\uFEFF').trimStart()
+        if (text.startsWith("<") && text.contains("KeePassFile", ignoreCase = true)) {
+            return parseKeePassXml(text)
+        }
+        return parse(text)
+    }
+
+    private fun parseKeePassXml(text: String): Parsed {
+        val parser = Xml.newPullParser()
+        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+        parser.setInput(StringReader(text))
+        val groups = mutableListOf<String>()
+        val entry = mutableMapOf<String, String>()
+        var inEntry = false
+        var inString = false
+        var pendingKey = ""
+        var textBuffer = ""
+        var skipped = 0
+        val rows = mutableListOf<Row>()
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> {
+                    textBuffer = ""
+                    when (parser.name) {
+                        "Group" -> groups.add("")
+                        "Entry" -> {
+                            inEntry = true
+                            entry.clear()
+                        }
+                        "String" -> inString = true
+                    }
+                }
+                XmlPullParser.TEXT -> textBuffer += parser.text.orEmpty()
+                XmlPullParser.END_TAG -> when (parser.name) {
+                    "Name" -> if (!inEntry && groups.isNotEmpty()) {
+                        groups[groups.lastIndex] = textBuffer.trim()
+                    }
+                    "Key" -> pendingKey = textBuffer.trim()
+                    "Value" -> if (inString && pendingKey.isNotBlank()) {
+                        entry[pendingKey] = textBuffer
+                    }
+                    "String" -> inString = false
+                    "Entry" -> {
+                        inEntry = false
+                        val title = entry["Title"].orEmpty()
+                        val username = entry["UserName"].orEmpty()
+                        val password = entry["Password"].orEmpty()
+                        val url = entry["URL"].orEmpty()
+                        val notes = entry["Notes"].orEmpty()
+                        val totp = entry["TOTP"] ?: entry["OTP"] ?: entry["otp"] ?: ""
+                        if (title.isBlank() && username.isBlank() && password.isBlank() && url.isBlank()) {
+                            skipped++
+                        } else {
+                            rows += Row(
+                                title = title.trim(),
+                                username = username.trim(),
+                                password = password,
+                                website = url.trim(),
+                                notes = notes,
+                                totp = totp.trim(),
+                                folder = groups.lastOrNull().orEmpty(),
+                                favorite = false
+                            )
+                        }
+                    }
+                    "Group" -> if (groups.isNotEmpty()) groups.removeAt(groups.lastIndex)
+                }
+            }
+            event = parser.next()
+        }
+        if (rows.isEmpty()) {
+            throw Unrecognized("The KeePass export did not contain any entries.")
+        }
+        return Parsed(provider = "KeePass (XML)", rows = rows, skipped = skipped)
+    }
+
+    private fun parse1Pux(bytes: ByteArray): Parsed {
+        val text = runCatching {
+            ZipInputStream(bytes.inputStream()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (entry.name == "export.data" || entry.name.endsWith(".data")) {
+                        return@use zip.readBytes().toString(Charsets.UTF_8)
+                    }
+                    entry = zip.nextEntry
+                }
+                null
+            }
+        }.getOrNull() ?: throw Unrecognized(
+            "This ZIP archive is not a 1Password .1pux export."
+        )
+
+        val root = runCatching { JSONObject(text) }.getOrElse {
+            throw Unrecognized("The 1Password export data could not be read.")
+        }
+        val rows = mutableListOf<Row>()
+        var skipped = 0
+        val accounts = root.optJSONArray("accounts") ?: JSONArray()
+        for (accountIndex in 0 until accounts.length()) {
+            val account = accounts.optJSONObject(accountIndex) ?: continue
+            val vaults = account.optJSONArray("vaults") ?: continue
+            for (vaultIndex in 0 until vaults.length()) {
+                val vault = vaults.optJSONObject(vaultIndex) ?: continue
+                val vaultName = vault.optString("name").ifBlank {
+                    vault.optJSONObject("attrs")?.optString("name").orEmpty()
+                }
+                val items = vault.optJSONArray("items") ?: continue
+                for (itemIndex in 0 until items.length()) {
+                    val item = items.optJSONObject(itemIndex) ?: continue
+                    val overview = item.optJSONObject("overview") ?: JSONObject()
+                    val details = item.optJSONObject("details") ?: JSONObject()
+                    val title = overview.optString("title")
+                    val website = overview.optString("url").ifBlank {
+                        overview.optJSONArray("urls")
+                            ?.optJSONObject(0)
+                            ?.optString("url")
+                            .orEmpty()
+                    }
+                    var username = ""
+                    var password = ""
+                    details.optJSONArray("loginFields")?.let { fields ->
+                        for (fieldIndex in 0 until fields.length()) {
+                            val field = fields.optJSONObject(fieldIndex) ?: continue
+                            when (field.optString("designation")) {
+                                "username" -> username = field.optString("value")
+                                "password" -> password = field.optString("value")
+                            }
+                        }
+                    }
+                    val notes = details.optString("notesPlain")
+                    if (title.isBlank() && username.isBlank() && password.isBlank() && website.isBlank()) {
+                        skipped++
+                        continue
+                    }
+                    rows += Row(
+                        title = title,
+                        username = username,
+                        password = password,
+                        website = website,
+                        notes = notes,
+                        totp = "",
+                        folder = vaultName,
+                        favorite = false
+                    )
+                }
+            }
+        }
+        if (rows.isEmpty()) {
+            throw Unrecognized("The 1Password export did not contain any logins.")
+        }
+        return Parsed(provider = "1Password (1PUX)", rows = rows, skipped = skipped)
+    }
 
     /**
      * Column-name aliases across known managers (Bitwarden, 1Password, LastPass, KeePassXC,

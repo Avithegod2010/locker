@@ -278,7 +278,7 @@ fun SecureCameraScreen(onBack: () -> Unit) {
                         } else {
                             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
                                 .format(java.util.Date())
-                            saveCapture(file, VaultType.FILE, "Video_$stamp")
+                            saveCapture(file, VaultType.VIDEO, "Video_$stamp")
                         }
                     }
                 }

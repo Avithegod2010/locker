@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -118,6 +119,7 @@ import app.locker.vault.ui.components.ItemIcon
 import app.locker.vault.ui.components.LockerCard
 import app.locker.vault.ui.components.LockerSearchField
 import app.locker.vault.ui.components.LockerTextField
+import app.locker.vault.core.SavedSearches
 import app.locker.vault.ui.components.LockerTopBar
 import app.locker.vault.ui.components.RoundIconButton
 import app.locker.vault.ui.components.accent
@@ -141,6 +143,10 @@ fun HomeScreen(navController: NavController) {
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
     val pendingShare by app.pendingShare.collectAsStateWithLifecycle()
     val pendingRoute by app.pendingRoute.collectAsStateWithLifecycle()
+    val pendingSearch by app.pendingSearch.collectAsStateWithLifecycle()
+    val savedSearches = remember(settings.savedSearchesJson) {
+        SavedSearches.parse(settings.savedSearchesJson)
+    }
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val snackbarHostState = remember { SnackbarHostState() }
@@ -149,6 +155,8 @@ fun HomeScreen(navController: NavController) {
     var showAddSheet by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showPrivacySheet by remember { mutableStateOf(false) }
+    var showSaveSearch by remember { mutableStateOf(false) }
+    var saveSearchName by remember { mutableStateOf("") }
     var pickerFor by remember { mutableStateOf<VaultItem?>(null) }
     var importing by remember { mutableStateOf(false) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
@@ -257,6 +265,12 @@ fun HomeScreen(navController: NavController) {
         val route = pendingRoute ?: return@LaunchedEffect
         app.pendingRoute.value = null
         navController.navigate(route) { launchSingleTop = true }
+    }
+
+    LaunchedEffect(pendingSearch) {
+        val query = pendingSearch ?: return@LaunchedEffect
+        app.pendingSearch.value = null
+        viewModel.setQuery(query)
     }
 
     ModalNavigationDrawer(
@@ -397,6 +411,63 @@ fun HomeScreen(navController: NavController) {
                     )
                     Spacer(Modifier.height(8.dp))
 
+                    if (state.filter.query.isBlank() && savedSearches.isNotEmpty()) {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(savedSearches, key = { it.id }) { search ->
+                                Surface(
+                                    onClick = { viewModel.setQuery(search.query) },
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ) {
+                                    Row(
+                                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Bookmark,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            search.name,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    if (state.filter.query.isNotBlank()) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = {
+                                saveSearchName = state.filter.query
+                                showSaveSearch = true
+                            }) {
+                                Icon(
+                                    Icons.Rounded.Bookmark,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Save search")
+                            }
+                        }
+                    }
+
                     AnimatedVisibility(
                         visible = settings.recoveryUsed,
                         enter = slideInVertically { -it } + fadeIn(),
@@ -477,6 +548,47 @@ fun HomeScreen(navController: NavController) {
         }
     }
 
+    if (showSaveSearch) {
+        AlertDialog(
+            onDismissRequest = { showSaveSearch = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Save smart folder") },
+            text = {
+                Column {
+                    Text(
+                        "This runs \"${state.filter.query}\" every time you open it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LockerTextField(
+                        value = saveSearchName,
+                        onValueChange = { saveSearchName = it },
+                        placeholder = "Banks",
+                        label = "Name"
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    app.preferences.setSavedSearchesJson(
+                        SavedSearches.add(
+                            settings.savedSearchesJson,
+                            saveSearchName,
+                            state.filter.query
+                        )
+                    )
+                    showSaveSearch = false
+                    scope.launch { snackbarHostState.showSnackbar("Smart folder saved") }
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveSearch = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     if (showAddSheet) {
         SaveToLockerSheet(
             onDismiss = { showAddSheet = false },
@@ -487,6 +599,8 @@ fun HomeScreen(navController: NavController) {
                     AddKind.NOTE -> navController.navigate(Routes.new(VaultType.NOTE))
                     AddKind.THING -> navController.navigate(Routes.new(VaultType.THING))
                     AddKind.SECRET -> navController.navigate(Routes.new(VaultType.SECRET))
+                    AddKind.VOICE -> navController.navigate(Routes.RECORDER)
+                    AddKind.SCAN -> navController.navigate(Routes.SCANNER)
                 }
             }
         )

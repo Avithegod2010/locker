@@ -223,6 +223,7 @@ fun VaultType.icon(): ImageVector = when (this) {
     VaultType.THING -> Icons.Rounded.Work
     VaultType.FILE -> Icons.Rounded.Description
     VaultType.PHOTO -> Icons.Rounded.Image
+    VaultType.VIDEO -> Icons.Rounded.PlayCircle
 }
 
 fun VaultType.accent(): Color = when (this) {
@@ -231,6 +232,7 @@ fun VaultType.accent(): Color = when (this) {
     VaultType.THING -> BrandBlue
     VaultType.FILE -> BrandCoral
     VaultType.PHOTO -> BrandMint
+    VaultType.VIDEO -> BrandBlue
 }
 
 @Composable
@@ -239,7 +241,7 @@ fun ItemIcon(
     size: Dp = 52.dp,
     modifier: Modifier = Modifier
 ) {
-    if (item.hasThumbnail && item.isImage) {
+    if (item.hasThumbnail && (item.isImage || item.isVideo)) {
         ItemThumbnail(item = item, modifier = modifier, size = size)
     } else {
         IconTile(

@@ -189,6 +189,7 @@ fun CollectionsSelector(
 @Composable
 fun NewCollectionDialog(
     existing: VaultCollection? = null,
+    parentId: String = "",
     onDismiss: () -> Unit,
     onCreated: (String) -> Unit
 ) {
@@ -313,7 +314,7 @@ fun NewCollectionDialog(
                     scope.launch {
                         val colorLong = color.toArgb().toLong() and 0xFFFFFFFFL
                         val result = if (existing == null) {
-                            app.repository.addCollection(name, colorLong, icon)
+                            app.repository.addCollection(name, colorLong, icon, parentId)
                                 .map { it.id }
                         } else {
                             app.repository.updateCollection(

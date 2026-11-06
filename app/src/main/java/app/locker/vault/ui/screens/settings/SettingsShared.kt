@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -56,10 +57,13 @@ fun SettingsScaffold(
         BackTopBar(title = title, onBack = onBack)
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .widthIn(max = 720.dp)
+                .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = 18.dp)
+                .align(Alignment.CenterHorizontally),
             content = content
         )
     }

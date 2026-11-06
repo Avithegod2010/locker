@@ -8,10 +8,10 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.2.0-release.apk` from the latest release.
+1. Install `Locker-1.3.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
-4. Add a secret, note, photo, video, or file. Everything is encrypted on-device before it is written to disk.
+4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
 
 ## Features
 
@@ -22,10 +22,16 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 - **Biometric unlock** — hardware-backed Android Keystore key that requires a fresh authentication, running in a dedicated secure activity.
 - **Vault password changes** — re-wraps the vault key without touching any items; Argon2id parameters auto-upgrade on unlock.
 - **Passwords** — TOTP codes, custom fields, password health, offline audit, a configurable generator (length, digits, symbols, look-alike filter), tags, and website fields.
-- **Password-manager import** — offline CSV import for Bitwarden, 1Password, LastPass, KeePassXC, Chrome/Edge, Firefox, Samsung Internet, and other exports. Folders that match an existing collection are filed there automatically; TOTP secrets and notes come along.
-- **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. The icon and name change, but every launch still lands on Locker's own lock screen, and your data is untouched.
-- **In-app video recording** — the secure camera has Photo and Video modes, records MP4 with optional audio (microphone permission is requested on first video use), and saves the clip straight into the encrypted vault with no gallery copy.
+- **Password-manager import** — offline import from Bitwarden, 1Password (CSV and .1pux), KeePass XML, LastPass, KeePassXC, Chrome/Edge, Firefox, Samsung Internet, and other CSV exports. You preview every row (with automatic duplicate detection) and choose what to import; folders that match an existing collection are filed there automatically, and TOTP secrets and notes come along.
+- **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. The Calculator disguise is fully functional: type your unlock code and press `=` to reveal Locker's lock screen. Every launch still requires the vault password.
+- **Duress password** — an optional second password that, when entered on the lock screen, permanently erases the real vault and opens a fresh decoy vault containing harmless example entries. The real data leaves no trace. There is no undo.
+- **In-app video recording** — the secure camera has Photo and Video modes, records MP4 with optional audio (microphone permission is requested on first video use), and saves the clip straight into the encrypted vault with no gallery copy. Videos get encrypted thumbnails, resume where you left off, remember playback speed, and can be trimmed into a clipped copy without re-encoding.
+- **Voice memos** — record encrypted audio notes with a live waveform, then play them back with a waveform scrubber and 0.5×–2× speed.
+- **Document scanner** — capture several pages, auto-trim the borders, and save one encrypted PDF straight into the vault.
 - **Media** — multi-select photo/video import, encrypted video playback, secure in-app camera, PDF viewer, OCR search, rotation, redaction, and a slideshow.
+- **Nested collections and smart folders** — collections can contain subcollections, and any search (`type:secret tag:bank`) can be saved as a smart folder that re-runs itself.
+- **Daily automatic backups** — optional encrypted `.locker` snapshots into a folder you choose, at most once a day after a password unlock, rotating the last N archives. Fully offline.
+- **Quick-capture widget actions** — the home-screen widget can open a new note or the camera, and lock the vault.
 - **Collections, tags, Important, and Archive** — group items, cut across collections with tags, bulk-select, and hide things without deleting them.
 - **Search and filters** — search across titles, usernames, notes, locations, filenames, OCR text, tags, custom fields, types, and collections; supports `type:`, `tag:`, `before:`, and `after:`.
 - **Share target and open-with** — send files, photos, videos, PDFs, or text to Locker from any app, or open supported files directly.
@@ -48,6 +54,9 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 | Backup format | `.locker` archive with Argon2id-derived backup key, wrapped master key, authenticated manifest, chunked AES-256-GCM records, and a whole-archive hash |
 | Master key wrapping | AES-256-GCM, authenticated AAD, fresh nonce |
 | Recovery key | 24 random digits + SHA-256 check digit (legacy 32-byte Crockford Base32 keys remain valid), stretched with Argon2id; an encrypted display copy is kept for retrieval while unlocked |
+| Duress password | Argon2id-derived verifier stored separately from the vault key; a match at the lock screen wipes the database, files, keys, and preferences before creating a fresh decoy vault |
+| Automatic backups | Encrypted `.locker` archives written to a user-picked SAF folder; the vault password copy used for the snapshot is held only for the length of the backup and wiped afterwards |
+| Launcher disguise | Activity aliases and `PackageManager` component states; the vault password is always required |
 | Item payloads | JSON encrypted with AES-256-GCM; AAD binds item id and type |
 | File bodies | 128 KiB AES-256-GCM chunks, random per-file key, random 8-byte nonce prefix + 32-bit chunk counter, AAD binds file id / chunk index / file-vs-thumbnail; whole-file size and SHA-256 are verified after decryption |
 | File keys | Wrapped by the vault master key with AES-256-GCM and store-bound AAD |
@@ -133,25 +142,26 @@ app/src/main/java/app/locker/vault/
 
 ## Verified on device
 
-The signed, minified release build (`DEV_BUILD=false`, R8, version 1.2.0) was installed in place over 1.1.0 on an Android 17 Samsung phone (1080 × 2340):
+The signed, minified release build (`DEV_BUILD=false`, R8, version 1.3.0) was installed in place over 1.2.0 on an Android 17 Samsung phone (1080 × 2340):
 
 - in-place update (`adb install -r`) with the real vault intact — no wipe and no re-onboarding
-- the updated app launches straight to its locked screen ("Welcome back", password, biometrics, recovery key); no crash appeared in logcat
-- APK metadata verified: versionName 1.2.0 (versionCode 3), no INTERNET permission, three launcher disguises registered, and the same release signing certificate
-- unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), CSV import edge cases (quoted commas, embedded newlines, semicolons, BOM), and password-generator guarantees
+- cold start after an app force-stop decrypts the existing vault again; the real video, photos, and notes created earlier are all listed (biometric unlock succeeds when the owner is present)
+- APK metadata verified: versionName 1.3.0 (versionCode 4), no INTERNET permission, three launcher disguises registered, and the same release signing certificate
+- unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), CSV import edge cases (quoted commas, embedded newlines, semicolons, BOM), password-generator guarantees, and the calculator disguise engine
 
-Version 1.1.0 had previously been exercised on the same device for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
+Version 1.2.0 had previously been exercised on the same device for the numeric recovery code, in-app video recording, offline password import, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 
-The camera screens (including in-app video recording), launcher disguises, and CSV import screens compile in both debug and release and their static surfaces were verified on device, but their interactive flows should still be exercised by the vault owner because they depend on OEM camera, document-picker, and launcher behaviour.
+The camera screens (video recording and document scanning), voice recorder, launcher disguises, duress flow, CSV/KeePass/1PUX import, smart folders, nested collections, and automatic backups compile in both debug and release and their static surfaces were verified on device. Their interactive flows should still be exercised by the vault owner because they depend on OEM camera, microphone, document-picker, and launcher behaviour.
 
 ## Known limitations / next steps
 
 - Intentionally **local-only**; there is no cloud sync, account, or cross-device sharing.
 - No scheduled reminders and no Wear OS companion yet.
-- Collections are flat (no nesting or smart rules); search supports `type:`, `tag:`, `before:`, and `after:` but has no saved searches or command palette.
-- No duress/decoy vault, multiple vaults, per-collection lock, or full master-key rotation yet.
-- Backup and CSV import are full/manual operations, not two-way sync; backups must be stored in a folder you control.
-- Document scanning, face/plate blur, ZIP import, and Live Photo/GIF preservation are not implemented.
+- Collections support nesting and saved searches; per-collection locks and smart rules beyond saved queries are not implemented.
+- No multiple vaults or full master-key rotation yet; the duress password intentionally destroys the real vault and opens a decoy.
+- Backups are full archives, not incremental; they must be stored in a folder you control.
+- Face/plate blur, ZIP import, and Live Photo/GIF preservation are not implemented.
+- Automatic backups run at most once a day, after a password unlock (not after a biometric-only unlock).
 - Autofill is designed for the unlocked vault and does not yet require a per-fill biometric prompt.
 - English UI only.
 - Legacy is an encrypted emergency-contact/notes page; it does not automatically transmit anything to contacts.

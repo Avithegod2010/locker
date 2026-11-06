@@ -42,7 +42,15 @@ data class AppSettings(
     val generatorLength: Int = 22,
     val generatorDigits: Boolean = true,
     val generatorSymbols: Boolean = true,
-    val generatorNoAmbiguous: Boolean = true
+    val generatorNoAmbiguous: Boolean = true,
+    val calculatorCodeHash: String = "",
+    val savedSearchesJson: String = "[]",
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupTreeUri: String = "",
+    val autoBackupKeep: Int = 5,
+    val autoBackupLastAt: Long = 0L,
+    val duressSalt: String = "",
+    val duressVerifier: String = ""
 )
 
 /** Launcher disguise chosen by the user; see [DisguiseManager]. */
@@ -85,7 +93,15 @@ class AppPreferences(context: Context) {
         generatorLength = prefs.getInt("generator_length", 22),
         generatorDigits = prefs.getBoolean("generator_digits", true),
         generatorSymbols = prefs.getBoolean("generator_symbols", true),
-        generatorNoAmbiguous = prefs.getBoolean("generator_no_ambiguous", true)
+        generatorNoAmbiguous = prefs.getBoolean("generator_no_ambiguous", true),
+        calculatorCodeHash = prefs.getString("calculator_code_hash", null).orEmpty(),
+        savedSearchesJson = prefs.getString("saved_searches", null) ?: "[]",
+        autoBackupEnabled = prefs.getBoolean("auto_backup_enabled", false),
+        autoBackupTreeUri = prefs.getString("auto_backup_tree", null).orEmpty(),
+        autoBackupKeep = prefs.getInt("auto_backup_keep", 5),
+        autoBackupLastAt = prefs.getLong("auto_backup_last_at", 0L),
+        duressSalt = prefs.getString("duress_salt", null).orEmpty(),
+        duressVerifier = prefs.getString("duress_verifier", null).orEmpty()
     )
 
     private fun update(block: android.content.SharedPreferences.Editor.() -> Unit) {
@@ -113,6 +129,38 @@ class AppPreferences(context: Context) {
     fun setWipeAfterAttempts(value: Int) = update { putInt("wipe_after_attempts", value) }
     fun setRecoveryUsed(value: Boolean) = update { putBoolean("recovery_used", value) }
 
+    fun setCalculatorCode(code: String) =
+        update { putString("calculator_code_hash", hashCalculatorCode(code)) }
+
+    fun hasCustomCalculatorCode(): Boolean = settings.value.calculatorCodeHash.isNotBlank()
+
+    fun calculatorCodeMatches(candidate: String): Boolean {
+        val stored = settings.value.calculatorCodeHash
+            .ifBlank { hashCalculatorCode(DEFAULT_CALCULATOR_CODE) }
+        return stored == hashCalculatorCode(candidate)
+    }
+
+    fun setSavedSearchesJson(json: String) = update { putString("saved_searches", json) }
+
+    fun setAutoBackupEnabled(value: Boolean) = update { putBoolean("auto_backup_enabled", value) }
+    fun setAutoBackupTreeUri(value: String) = update { putString("auto_backup_tree", value) }
+    fun setAutoBackupKeep(value: Int) = update { putInt("auto_backup_keep", value.coerceIn(2, 20)) }
+    fun setAutoBackupLastAt(value: Long) = update { putLong("auto_backup_last_at", value) }
+
+    fun setDuressCredentials(salt: String, verifier: String) = update {
+        putString("duress_salt", salt)
+        putString("duress_verifier", verifier)
+    }
+
+    fun clearDuressCredentials() = update {
+        remove("duress_salt")
+        remove("duress_verifier")
+    }
+
+    private fun hashCalculatorCode(value: String): String =
+        Crypto.sha256(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
     fun failedAttempts(): Int = prefs.getInt("failed_attempts", 0)
 
     /**
@@ -127,5 +175,9 @@ class AppPreferences(context: Context) {
     fun reset() {
         prefs.edit().clear().apply()
         _settings.value = read()
+    }
+
+    companion object {
+        const val DEFAULT_CALCULATOR_CODE = "1234"
     }
 }

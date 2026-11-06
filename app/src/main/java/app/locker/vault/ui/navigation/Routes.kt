@@ -18,6 +18,8 @@ object Routes {
     const val PASSWORD_HEALTH = "password-health"
     const val IMPORT_PASSWORDS = "import-passwords"
     const val CAMERA = "camera"
+    const val RECORDER = "recorder"
+    const val SCANNER = "scanner"
     const val SLIDESHOW = "slideshow"
     const val IMPORT_PHOTO = "import/photo"
     const val IMPORT_FILE = "import/file"

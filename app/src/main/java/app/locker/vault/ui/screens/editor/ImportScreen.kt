@@ -168,7 +168,11 @@ fun ImportScreen(
                         }
                         val result = app.repository.importFile(
                             uri = media.uri,
-                            type = type,
+                            type = when {
+                                media.isVideo -> VaultType.VIDEO
+                                media.isImage -> VaultType.PHOTO
+                                else -> VaultType.FILE
+                            },
                             title = itemTitle,
                             collectionIds = selectedCollections.toList(),
                             favorite = favorite

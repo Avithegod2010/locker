@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.exifinterface.media.ExifInterface
@@ -107,7 +108,8 @@ class EncryptedFileStore(context: Context) {
 
             var hasThumb = false
             if (generateThumbnail) {
-                val thumbBytes = runCatching { createThumbnail(uri) }.getOrNull()
+                val video = mimeType.startsWith("video/")
+                val thumbBytes = runCatching { createThumbnail(uri, video) }.getOrNull()
                 if (thumbBytes != null) {
                     val thumbTarget = thumbnailFile(itemId)
                     runCatching {
@@ -465,7 +467,8 @@ class EncryptedFileStore(context: Context) {
         }
     }
 
-    private fun createThumbnail(uri: Uri): ByteArray? {
+    private fun createThumbnail(uri: Uri, video: Boolean): ByteArray? {
+        if (video) return createVideoThumbnail(uri)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -487,6 +490,44 @@ class EncryptedFileStore(context: Context) {
             scaled.compress(Bitmap.CompressFormat.JPEG, 82, output)
             scaled.recycle()
             output.toByteArray()
+        }
+    }
+
+    private fun createVideoThumbnail(uri: Uri): ByteArray? {
+        val retriever = MediaMetadataRetriever()
+        var frame: Bitmap? = null
+        return try {
+            resolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                retriever.setDataSource(
+                    descriptor.fileDescriptor,
+                    descriptor.startOffset,
+                    descriptor.length
+                )
+            } ?: return null
+            frame = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0L)
+                ?: return null
+            val rotation = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION
+            )?.toFloatOrNull() ?: 0f
+            val rotated = if (rotation != 0f) {
+                val matrix = Matrix().apply { postRotate(rotation) }
+                Bitmap.createBitmap(frame!!, 0, 0, frame!!.width, frame!!.height, matrix, true)
+            } else {
+                frame!!
+            }
+            val scaled = scaleDown(rotated, THUMB_MAX)
+            ByteArrayOutputStream().use { output ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 82, output)
+                if (scaled !== rotated) scaled.recycle()
+                if (rotated !== frame) rotated.recycle()
+                output.toByteArray()
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            frame?.let { if (!it.isRecycled) it.recycle() }
+            retriever.release()
         }
     }
 

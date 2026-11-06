@@ -25,13 +25,17 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.core.Formatting
+import app.locker.vault.core.PasswordGenerator
 import app.locker.vault.core.Totp
 import app.locker.vault.data.CustomField
 import app.locker.vault.data.VaultItem
@@ -67,7 +72,7 @@ import app.locker.vault.ui.theme.BrandBlue
 import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
 import kotlinx.coroutines.launch
-import java.security.SecureRandom
+import kotlin.math.roundToInt
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -80,6 +85,7 @@ fun TextEditorScreen(
     val scope = rememberCoroutineScope()
     val allItems by app.repository.items.collectAsStateWithLifecycle()
     val collections by app.repository.collections.collectAsStateWithLifecycle()
+    val settings by app.preferences.settings.collectAsStateWithLifecycle()
     val existing = remember(itemId, allItems) {
         itemId?.let { id -> allItems.firstOrNull { it.id == id } }
     }
@@ -130,6 +136,7 @@ fun TextEditorScreen(
         mutableStateOf(existing?.collectionIds ?: emptyList())
     }
     var revealPassword by rememberSaveable(itemId, effectiveType) { mutableStateOf(false) }
+    var showGeneratorOptions by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -256,7 +263,7 @@ fun TextEditorScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = {
-                                password = generatePassword()
+                                password = PasswordGenerator.generate(settings)
                                 revealPassword = true
                             },
                             modifier = Modifier.size(34.dp)
@@ -265,6 +272,17 @@ fun TextEditorScreen(
                                 Icons.Rounded.AutoAwesome,
                                 contentDescription = "Generate password",
                                 tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { showGeneratorOptions = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Tune,
+                                contentDescription = "Generator options",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(19.dp)
                             )
                         }
@@ -285,6 +303,55 @@ fun TextEditorScreen(
             if (password.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
                 PasswordStrengthInline(password)
+            }
+            if (showGeneratorOptions && effectiveType == VaultType.SECRET) {
+                AlertDialog(
+                    onDismissRequest = { showGeneratorOptions = false },
+                    title = {
+                        Text(
+                            "Password generator",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Length · ${settings.generatorLength}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Slider(
+                                value = settings.generatorLength.toFloat(),
+                                onValueChange = { app.preferences.setGeneratorLength(it.roundToInt()) },
+                                valueRange = 10f..64f,
+                                steps = 53
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            GeneratorSwitch("Include digits", settings.generatorDigits) {
+                                app.preferences.setGeneratorDigits(it)
+                            }
+                            GeneratorSwitch("Include symbols", settings.generatorSymbols) {
+                                app.preferences.setGeneratorSymbols(it)
+                            }
+                            GeneratorSwitch(
+                                "Avoid look-alike characters (l I O 0 1)",
+                                settings.generatorNoAmbiguous
+                            ) {
+                                app.preferences.setGeneratorNoAmbiguous(it)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            password = PasswordGenerator.generate(settings)
+                            revealPassword = true
+                            showGeneratorOptions = false
+                        }) { Text("Generate") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showGeneratorOptions = false }) { Text("Done") }
+                    }
+                )
             }
             Spacer(Modifier.height(18.dp))
             LockerTextField(
@@ -775,22 +842,22 @@ private fun PasswordStrengthInline(password: String) {
     }
 }
 
-private fun generatePassword(length: Int = 22): String {
-    val upper = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-    val lower = "abcdefghijkmnopqrstuvwxyz"
-    val digits = "23456789"
-    val symbols = "!@#$%^&*-_=+?"
-    val all = upper + lower + digits + symbols
-    val random = SecureRandom()
-    val chars = mutableListOf(
-        upper[random.nextInt(upper.length)],
-        lower[random.nextInt(lower.length)],
-        digits[random.nextInt(digits.length)],
-        symbols[random.nextInt(symbols.length)]
-    )
-    repeat(length - chars.size) {
-        chars += all[random.nextInt(all.length)]
+@Composable
+private fun GeneratorSwitch(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
-    chars.shuffle(random)
-    return chars.joinToString("")
 }

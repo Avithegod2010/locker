@@ -14,6 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.locker.vault.core.AppPreferences
 import app.locker.vault.core.BiometricKeyStore
+import app.locker.vault.core.DisguiseManager
 import app.locker.vault.core.KeyMaterialStore
 import app.locker.vault.core.SecureClipboard
 import app.locker.vault.core.SessionManager
@@ -123,6 +124,8 @@ class LockerApp : Application(), DefaultLifecycleObserver {
     override fun onCreate() {
         super<Application>.onCreate()
         container = AppContainer(this)
+        // Keep a chosen launcher disguise in sync after updates or restores.
+        DisguiseManager.ensureApplied(this, container.preferences.settings.value.disguiseMode)
         // Remove any decrypted share/camera leftovers from a previous process.
         container.fileStore.clearSensitiveCaches()
         container.appScope.launch {

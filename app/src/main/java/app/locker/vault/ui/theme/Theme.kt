@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import app.locker.vault.R
+import app.locker.vault.core.Accent
 import app.locker.vault.core.AppSettings
 import app.locker.vault.core.ThemeMode
 
@@ -33,6 +34,65 @@ val BrandMint = Color(0xFF57D9A3)
 val BrandAmber = Color(0xFFFFB968)
 val BrandViolet = Color(0xFFB69CFF)
 val BrandCoral = Color(0xFFFF8F7A)
+
+/**
+ * Static accent themes. Each entry recolors the primary family of the base scheme; dynamic
+ * wallpaper colors override all of them when enabled.
+ */
+data class AccentTheme(
+    val id: String,
+    val label: String,
+    val swatch: Color,
+    val darkPrimary: Color,
+    val darkContainer: Color,
+    val darkOnContainer: Color,
+    val lightPrimary: Color,
+    val lightContainer: Color,
+    val lightOnContainer: Color
+)
+
+val AccentThemes = listOf(
+    AccentTheme(
+        Accent.ID_DEFAULT, "Locker Blue", Color(0xFF5B9CFF),
+        Color(0xFF6EA8FF), Color(0xFF1B3E70), Color(0xFFD6E4FF),
+        Color(0xFF2F6FEA), Color(0xFFD9E5FF), Color(0xFF001B3E)
+    ),
+    AccentTheme(
+        "violet", "Violet", Color(0xFFB69CFF),
+        Color(0xFFB69CFF), Color(0xFF472A80), Color(0xFFEBDDFF),
+        Color(0xFF7452E0), Color(0xFFE7DCFF), Color(0xFF251058)
+    ),
+    AccentTheme(
+        "mint", "Mint", Color(0xFF57D9A3),
+        Color(0xFF5FE0A4), Color(0xFF0E4C30), Color(0xFFAFF5CF),
+        Color(0xFF178F5D), Color(0xFFC3F1D8), Color(0xFF00391F)
+    ),
+    AccentTheme(
+        "coral", "Coral", Color(0xFFFF8F7A),
+        Color(0xFFFF9E8C), Color(0xFF6E1F12), Color(0xFFFFDAD4),
+        Color(0xFFCB4227), Color(0xFFFFDAD2), Color(0xFF550500)
+    ),
+    AccentTheme(
+        "amber", "Amber", Color(0xFFFFB968),
+        Color(0xFFFFC978), Color(0xFF5C420B), Color(0xFFFFE191),
+        Color(0xFF8A5708), Color(0xFFFFE0AC), Color(0xFF2A1800)
+    ),
+    AccentTheme(
+        "rose", "Rose", Color(0xFFFF7FA8),
+        Color(0xFFFF8FBB), Color(0xFF761B44), Color(0xFFFFD9E5),
+        Color(0xFFC13E63), Color(0xFFFFD9E1), Color(0xFF51031E)
+    ),
+    AccentTheme(
+        "ice", "Ice", Color(0xFF7BD5E5),
+        Color(0xFF86DBE9), Color(0xFF0E4A57), Color(0xFFC2F3FF),
+        Color(0xFF0B7D91), Color(0xFFBEEFF7), Color(0xFF003441)
+    ),
+    AccentTheme(
+        "lime", "Lime", Color(0xFFC4E86B),
+        Color(0xFFCDEE7C), Color(0xFF46531A), Color(0xFFE7F8B3),
+        Color(0xFF5C7211), Color(0xFFE7F2B8), Color(0xFF1A2300)
+    )
+)
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF6EA8FF),
@@ -237,11 +297,37 @@ fun LockerTheme(
         ThemeMode.DARK -> true
     }
     val dynamic = settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val colors = when {
+    val base = when {
         dynamic && dark -> dynamicDarkColorScheme(context)
         dynamic -> dynamicLightColorScheme(context)
         dark -> DarkColors
         else -> LightColors
+    }
+    val accent = AccentThemes.firstOrNull { it.id == settings.accentId }
+    var colors = base
+    if (accent != null && !dynamic) {
+        val primary = if (dark) accent.darkPrimary else accent.lightPrimary
+        val container = if (dark) accent.darkContainer else accent.lightContainer
+        val onContainer = if (dark) accent.darkOnContainer else accent.lightOnContainer
+        colors = colors.copy(
+            primary = primary,
+            primaryContainer = container,
+            onPrimaryContainer = onContainer,
+            surfaceTint = primary
+        )
+    }
+    if (dark && settings.trueBlack) {
+        colors = colors.copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceTint = colors.surfaceTint,
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = Color(0xFF070707),
+            surfaceContainer = Color(0xFF0C0C0C),
+            surfaceContainerHigh = Color(0xFF141414),
+            surfaceContainerHighest = Color(0xFF1D1D1D),
+            outlineVariant = Color(0xFF262626)
+        )
     }
 
     val view = LocalView.current

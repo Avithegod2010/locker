@@ -7,4 +7,7 @@
     <string name="shortcut_new_secret">New secret</string>
     <string name="shortcut_lock">Lock vault</string>
     <string name="widget_name">Locker status</string>
+    <string name="alias_calculator">Calculator</string>
+    <string name="alias_calendar">Calendar</string>
+    <string name="alias_notes">Notes</string>
 </resources>

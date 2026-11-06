@@ -27,6 +27,8 @@ data class AppSettings(
     val onboardingComplete: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.DARK,
     val dynamicColor: Boolean = false,
+    val accentId: String = Accent.ID_DEFAULT,
+    val trueBlack: Boolean = false,
     val blockScreenshots: Boolean = true,
     val autoLockSeconds: Int = 60,
     val clipboardClearSeconds: Int = 30,
@@ -35,8 +37,26 @@ data class AppSettings(
     val haptics: Boolean = true,
     val autoPurgeTrash: Boolean = true,
     val wipeAfterAttempts: Int = 0,
-    val recoveryUsed: Boolean = false
+    val recoveryUsed: Boolean = false,
+    val disguiseMode: String = DisguiseManager.ID_NONE,
+    val generatorLength: Int = 22,
+    val generatorDigits: Boolean = true,
+    val generatorSymbols: Boolean = true,
+    val generatorNoAmbiguous: Boolean = true
 )
+
+/** Launcher disguise chosen by the user; see [DisguiseManager]. */
+object Disguise {
+    const val ID_NONE = "none"
+    const val ID_CALCULATOR = "calculator"
+    const val ID_CALENDAR = "calendar"
+    const val ID_NOTES = "notes"
+    const val ID_DEFAULT = ID_NONE
+}
+
+object Accent {
+    const val ID_DEFAULT = "blue"
+}
 
 /**
  * Non-secret preferences. Secret material lives in [KeyMaterialStore] and is always wrapped.
@@ -50,6 +70,8 @@ class AppPreferences(context: Context) {
         onboardingComplete = prefs.getBoolean("onboarding_complete", false),
         themeMode = ThemeMode.from(prefs.getString("theme_mode", null)),
         dynamicColor = prefs.getBoolean("dynamic_color", false),
+        accentId = prefs.getString("accent_id", null) ?: Accent.ID_DEFAULT,
+        trueBlack = prefs.getBoolean("true_black", false),
         blockScreenshots = prefs.getBoolean("block_screenshots", true),
         autoLockSeconds = prefs.getInt("auto_lock_seconds", 60),
         clipboardClearSeconds = prefs.getInt("clipboard_clear_seconds", 30),
@@ -58,7 +80,12 @@ class AppPreferences(context: Context) {
         haptics = prefs.getBoolean("haptics", true),
         autoPurgeTrash = prefs.getBoolean("auto_purge_trash", true),
         wipeAfterAttempts = prefs.getInt("wipe_after_attempts", 0),
-        recoveryUsed = prefs.getBoolean("recovery_used", false)
+        recoveryUsed = prefs.getBoolean("recovery_used", false),
+        disguiseMode = prefs.getString("disguise_mode", null) ?: Disguise.ID_DEFAULT,
+        generatorLength = prefs.getInt("generator_length", 22),
+        generatorDigits = prefs.getBoolean("generator_digits", true),
+        generatorSymbols = prefs.getBoolean("generator_symbols", true),
+        generatorNoAmbiguous = prefs.getBoolean("generator_no_ambiguous", true)
     )
 
     private fun update(block: android.content.SharedPreferences.Editor.() -> Unit) {
@@ -76,6 +103,13 @@ class AppPreferences(context: Context) {
     fun setSortMode(mode: SortMode) = update { putString("sort_mode", mode.storageValue) }
     fun setHaptics(value: Boolean) = update { putBoolean("haptics", value) }
     fun setAutoPurgeTrash(value: Boolean) = update { putBoolean("auto_purge_trash", value) }
+    fun setAccent(value: String) = update { putString("accent_id", value) }
+    fun setTrueBlack(value: Boolean) = update { putBoolean("true_black", value) }
+    fun setDisguiseMode(value: String) = update { putString("disguise_mode", value) }
+    fun setGeneratorLength(value: Int) = update { putInt("generator_length", value.coerceIn(10, 64)) }
+    fun setGeneratorDigits(value: Boolean) = update { putBoolean("generator_digits", value) }
+    fun setGeneratorSymbols(value: Boolean) = update { putBoolean("generator_symbols", value) }
+    fun setGeneratorNoAmbiguous(value: Boolean) = update { putBoolean("generator_no_ambiguous", value) }
     fun setWipeAfterAttempts(value: Int) = update { putInt("wipe_after_attempts", value) }
     fun setRecoveryUsed(value: Boolean) = update { putBoolean("recovery_used", value) }
 

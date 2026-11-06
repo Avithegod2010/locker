@@ -29,6 +29,7 @@ import app.locker.vault.ui.screens.settings.AccountScreen
 import app.locker.vault.ui.screens.settings.AppearanceSettingsScreen
 import app.locker.vault.ui.screens.settings.BackupScreen
 import app.locker.vault.ui.screens.settings.GeneralSettingsScreen
+import app.locker.vault.ui.screens.settings.ImportPasswordsScreen
 import app.locker.vault.ui.screens.settings.PasswordHealthScreen
 import app.locker.vault.ui.screens.settings.SecuritySettingsScreen
 import app.locker.vault.ui.screens.trash.TrashScreen
@@ -93,7 +94,8 @@ fun LockerNavHost() {
             SecuritySettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
-                onOpenPasswordHealth = { navController.navigate(Routes.PASSWORD_HEALTH) }
+                onOpenPasswordHealth = { navController.navigate(Routes.PASSWORD_HEALTH) },
+                onOpenImport = { navController.navigate(Routes.IMPORT_PASSWORDS) }
             )
         }
         composable(Routes.BACKUP) {
@@ -104,6 +106,9 @@ fun LockerNavHost() {
                 onBack = { navController.popBackStack() },
                 onOpenItem = { navController.navigate(Routes.item(it.id)) }
             )
+        }
+        composable(Routes.IMPORT_PASSWORDS) {
+            ImportPasswordsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.APPEARANCE) {
             AppearanceSettingsScreen(onBack = { navController.popBackStack() })

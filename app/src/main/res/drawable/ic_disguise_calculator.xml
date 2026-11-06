@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Calculator body -->
+    <path
+        android:fillColor="#16303F"
+        android:strokeColor="#47B8E0"
+        android:strokeWidth="2.2"
+        android:pathData="M32,26 h44 a8,8 0 0,1 8,8 v40 a8,8 0 0,1 -8,8 h-44 a8,8 0 0,1 -8,-8 v-40 a8,8 0 0,1 8,-8 Z" />
+    <!-- Display -->
+    <path
+        android:fillColor="#0D1D2B"
+        android:strokeColor="#2F6C8F"
+        android:strokeWidth="1.4"
+        android:pathData="M34,32 h40 a4,4 0 0,1 4,4 v8 a4,4 0 0,1 -4,4 h-40 a4,4 0 0,1 -4,-4 v-8 a4,4 0 0,1 4,-4 Z" />
+    <path
+        android:fillColor="#57D9A3"
+        android:pathData="M36,37 h30 a1.8,1.8 0 0,1 0,3.6 h-30 a1.8,1.8 0 0,1 0,-3.6 Z" />
+    <!-- Keys: 3 x 3 -->
+    <path android:fillColor="#6CC6E8" android:pathData="M31,54 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0 Z" />
+    <path android:fillColor="#6CC6E8" android:pathData="M51,54 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0 Z" />
+    <path android:fillColor="#6CC6E8" android:pathData="M71,54 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0 Z" />
+    <path android:fillColor="#6CC6E8" android:pathData="M31,66 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0 Z" />
+    <path android:fillColor="#6CC6E8" android:pathData="M51,66 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0 Z" />
+    <path android:fillColor="#6CC6E8" android:pathData="M71,66 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0 Z" />
+</vector>

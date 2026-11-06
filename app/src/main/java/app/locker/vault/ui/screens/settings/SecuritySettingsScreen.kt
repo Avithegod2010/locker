@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.NoteAdd
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Visibility
@@ -52,6 +53,7 @@ import android.net.Uri
 import android.provider.Settings
 import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.core.Crypto
+import app.locker.vault.core.DisguiseManager
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.LockerTextField
@@ -69,7 +71,8 @@ import kotlinx.coroutines.withContext
 fun SecuritySettingsScreen(
     onBack: () -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenPasswordHealth: () -> Unit
+    onOpenPasswordHealth: () -> Unit,
+    onOpenImport: () -> Unit
 ) {
     val app = LocalAppContainer.current
     val context = LocalContext.current
@@ -99,6 +102,7 @@ fun SecuritySettingsScreen(
     var showWipeVault by remember { mutableStateOf(false) }
     var showRecoveryKey by remember { mutableStateOf(false) }
     var recoveryKeyText by remember { mutableStateOf<String?>(null) }
+    var showDisguise by remember { mutableStateOf(false) }
 
     val biometricAvailable = remember { app.biometricKeyStore.canAuthenticate() }
     val autoLockOptions = listOf(
@@ -117,11 +121,22 @@ fun SecuritySettingsScreen(
         ChoiceOption("Never")
     )
     val clipboardValues = listOf(15, 30, 60, 120, 0)
+    val disguiseIds = listOf(
+        DisguiseManager.ID_NONE,
+        DisguiseManager.ID_CALCULATOR,
+        DisguiseManager.ID_CALENDAR,
+        DisguiseManager.ID_NOTES
+    )
+    val disguiseOptions = listOf(
+        ChoiceOption("Locker", "The real app: shield icon and the name Locker"),
+        ChoiceOption("Calculator", "Plain calculator icon and name on the home screen"),
+        ChoiceOption("Calendar", "Calendar icon and name on the home screen"),
+        ChoiceOption("Notes", "Notes icon and name on the home screen")
+    )
     val wipeOptions = listOf(
         ChoiceOption("Off", "Never erase automatically"),
         ChoiceOption("After 5 failed attempts"),
-        ChoiceOption("After 10 failed attempts"),
-        ChoiceOption("After 15 failed attempts")
+        ChoiceOption("After 10 failed attempts"),        ChoiceOption("After 15 failed attempts")
     )
     val wipeValues = listOf(0, 5, 10, 15)
 
@@ -267,6 +282,33 @@ fun SecuritySettingsScreen(
                 subtitle = "Find weak, reused, common, and year-old passwords.",
                 onClick = onOpenPasswordHealth
             )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.NoteAdd,
+                tint = BrandMint,
+                title = "Import passwords from CSV",
+                subtitle = "Bring logins over from Bitwarden, 1Password, LastPass, Chrome, and more. Parsed and encrypted fully offline.",
+                onClick = onOpenImport
+            )
+        }
+
+        SettingsSectionTitle("Launcher disguise")
+        InfoBanner(
+            icon = Icons.Rounded.Shield,
+            tint = BrandViolet,
+            title = "Disguised on the home screen",
+            text = "A disguise swaps the icon and the app name everywhere on this phone. Opening it still shows Locker's own lock screen — your data is unchanged and always encrypted."
+        )
+        Spacer(Modifier.height(10.dp))
+        SettingsGroup {
+            SettingRow(
+                icon = Icons.Rounded.Shield,
+                tint = BrandViolet,
+                title = "Show as",
+                subtitle = "The icon and name other people see in the app drawer.",
+                value = DisguiseManager.labelFor(settings.disguiseMode),
+                onClick = { showDisguise = true }
+            )
         }
 
         SettingsSectionTitle("Locking")
@@ -308,6 +350,13 @@ fun SecuritySettingsScreen(
                 onClick = { showClipboard = true }
             )
         }
+
+        InfoBanner(
+            icon = Icons.Rounded.VisibilityOff,
+            tint = BrandAmber,
+            title = "Screen turns black while typing?",
+            text = "On some Samsung phones with One UI, apps that block screenshots can briefly fade the keyboard area to black while you type. This is a device quirk — nothing is broken and the physical screen shows your input normally. If it bothers you, turn \"Prevent screenshots\" off temporarily while editing."
+        )
 
         SettingsSectionTitle("Recovery")
         InfoBanner(
@@ -416,6 +465,20 @@ fun SecuritySettingsScreen(
             selectedIndex = clipboardValues.indexOf(settings.clipboardClearSeconds).coerceAtLeast(0),
             onSelect = { index -> app.preferences.setClipboardClearSeconds(clipboardValues[index]) },
             onDismiss = { showClipboard = false }
+        )
+    }
+
+    if (showDisguise) {
+        ChoiceDialog(
+            title = "Launcher disguise",
+            options = disguiseOptions,
+            selectedIndex = disguiseIds.indexOf(settings.disguiseMode).coerceAtLeast(0),
+            onSelect = { index ->
+                val id = disguiseIds[index]
+                app.preferences.setDisguiseMode(id)
+                DisguiseManager.apply(context, id)
+            },
+            onDismiss = { showDisguise = false }
         )
     }
 

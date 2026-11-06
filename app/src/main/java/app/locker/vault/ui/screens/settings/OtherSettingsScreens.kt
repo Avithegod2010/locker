@@ -3,6 +3,8 @@ package app.locker.vault.ui.screens.settings
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +18,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
@@ -67,6 +71,7 @@ import app.locker.vault.ui.components.FilterPill
 import app.locker.vault.ui.components.LockerCard
 import app.locker.vault.ui.components.LockerTextField
 import app.locker.vault.ui.components.PrimaryButton
+import app.locker.vault.ui.theme.AccentThemes
 import app.locker.vault.ui.theme.BrandAmber
 import app.locker.vault.ui.theme.BrandBlue
 import app.locker.vault.ui.theme.BrandMint
@@ -108,6 +113,78 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
                 selected = settings.themeMode == ThemeMode.DARK,
                 onClick = { app.preferences.setThemeMode(ThemeMode.DARK) },
                 modifier = Modifier.weight(1f)
+            )
+        }
+
+        SettingsSectionTitle("Accent color")
+        SettingsGroup {
+            Column(Modifier.padding(vertical = 14.dp)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    AccentThemes.forEach { accent ->
+                        val selected = settings.accentId == accent.id
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(accent.swatch)
+                                    .border(
+                                        width = if (selected) 3.dp else 1.dp,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        },
+                                        shape = CircleShape
+                                    )
+                                    .clickable { app.preferences.setAccent(accent.id) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selected) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        contentDescription = "Selected",
+                                        tint = Color(0xFF06101A),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                accent.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                }
+                if (settings.dynamicColor && dynamicSupported) {
+                    Text(
+                        "Wallpaper colors are on — the accent presets are overridden until you turn that off.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+            RowDivider()
+            SettingSwitchRow(
+                icon = Icons.Rounded.DarkMode,
+                tint = BrandBlue,
+                title = "True black",
+                subtitle = "Pure #000000 background in dark mode for OLED screens.",
+                checked = settings.trueBlack,
+                onCheckedChange = { app.preferences.setTrueBlack(it) }
             )
         }
 

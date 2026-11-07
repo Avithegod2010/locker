@@ -535,30 +535,29 @@ fun RecoveryKeyScreen() {
     var verifying by rememberSaveable { mutableStateOf(false) }
     var answer1 by remember { mutableStateOf("") }
     var answer2 by remember { mutableStateOf("") }
-    var answer3 by remember { mutableStateOf("") }
     var verifyError by remember { mutableStateOf<String?>(null) }
     val rawCode = code ?: ""
     val groups = remember(rawCode) {
-        rawCode.replace(" ", "").chunked(4)
+        // Numeric recovery codes are 25 digits, displayed and grouped in fives.
+        rawCode.replace(" ", "").chunked(5)
     }
     val expected = remember(groups) {
         listOf(
             groups.getOrNull(1).orEmpty(),
-            groups.getOrNull(4).orEmpty(),
-            groups.getOrNull(9).orEmpty()
+            groups.getOrNull(3).orEmpty()
         )
     }
     val display = remember(rawCode) {
-        if (rawCode.isBlank()) "" else rawCode.replace(" ", "").chunked(4)
-            .chunked(5)
-            .joinToString("\n") { it.joinToString(" ") }
+        if (rawCode.isBlank()) "" else rawCode.replace(" ", "").chunked(5)
+            .joinToString(" ")
     }
 
     fun normalize(value: String) = value.replace(" ", "").replace("\n", "").uppercase()
 
     fun verify(): Boolean {
+        val answers = listOf(answer1, answer2)
         val ok = expected.indices.all { index ->
-            val answer = normalize(listOf(answer1, answer2, answer3)[index])
+            val answer = normalize(answers[index])
             answer.isNotEmpty() && answer == normalize(expected[index])
         }
         if (!ok) {
@@ -728,16 +727,8 @@ fun RecoveryKeyScreen() {
             LockerTextField(
                 value = answer2,
                 onValueChange = { answer2 = it; verifyError = null },
-                placeholder = "Group 5",
-                label = "Group 5",
-                required = true
-            )
-            Spacer(Modifier.height(10.dp))
-            LockerTextField(
-                value = answer3,
-                onValueChange = { answer3 = it; verifyError = null },
-                placeholder = "Group 10",
-                label = "Group 10",
+                placeholder = "Group 4",
+                label = "Group 4",
                 required = true
             )
             if (verifyError != null) {
@@ -752,7 +743,7 @@ fun RecoveryKeyScreen() {
             PrimaryButton(
                 text = "Verify and continue",
                 onClick = { verify() },
-                enabled = answer1.isNotBlank() && answer2.isNotBlank() && answer3.isNotBlank()
+                enabled = answer1.isNotBlank() && answer2.isNotBlank()
             )
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = {

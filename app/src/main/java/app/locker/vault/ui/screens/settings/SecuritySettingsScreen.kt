@@ -738,7 +738,11 @@ private fun RecoveryKeyDialog(code: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val cleaned = code.replace(" ", "")
     val formatted = remember(code) {
-        cleaned.chunked(4).chunked(5).joinToString("\n") { it.joinToString(" ") }
+        if (cleaned.length == 25) {
+            cleaned.chunked(5).joinToString(" ")
+        } else {
+            cleaned.chunked(4).chunked(5).joinToString("\n") { it.joinToString(" ") }
+        }
     }
     AlertDialog(
         onDismissRequest = onDismiss,

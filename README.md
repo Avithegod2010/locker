@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.3.0-release.apk` from the latest release.
+1. Install `Locker-1.3.1-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -23,7 +23,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 - **Vault password changes** — re-wraps the vault key without touching any items; Argon2id parameters auto-upgrade on unlock.
 - **Passwords** — TOTP codes, custom fields, password health, offline audit, a configurable generator (length, digits, symbols, look-alike filter), tags, and website fields.
 - **Password-manager import** — offline import from Bitwarden, 1Password (CSV and .1pux), KeePass XML, LastPass, KeePassXC, Chrome/Edge, Firefox, Samsung Internet, and other CSV exports. You preview every row (with automatic duplicate detection) and choose what to import; folders that match an existing collection are filed there automatically, and TOTP secrets and notes come along.
-- **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. The Calculator disguise is fully functional: type your unlock code and press `=` to reveal Locker's lock screen. Every launch still requires the vault password.
+- **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. The Calculator disguise is fully functional: type your unlock code and press `=` to reveal Locker's lock screen. Every launch still requires the vault password. Only one icon is shown at a time; if your launcher caches the old icon, use **Refresh launcher icon** in Security. Launcher shortcuts and widget actions may not resolve while a disguise is active.
 - **Duress password** — an optional second password that, when entered on the lock screen, permanently erases the real vault and opens a fresh decoy vault containing harmless example entries. The real data leaves no trace. There is no undo.
 - **In-app video recording** — the secure camera has Photo and Video modes, records MP4 with optional audio (microphone permission is requested on first video use), and saves the clip straight into the encrypted vault with no gallery copy. Videos get encrypted thumbnails, resume where you left off, remember playback speed, and can be trimmed into a clipped copy without re-encoding.
 - **Voice memos** — record encrypted audio notes with a live waveform, then play them back with a waveform scrubber and 0.5×–2× speed.
@@ -125,6 +125,8 @@ Build it with:
 
 The release variant is minified with R8, has `DEV_BUILD=false`, and defaults screenshot protection to **on**.
 
+The **1.3.1 hotfix** is the one exception: it is packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
+
 `BuildConfig.DEV_BUILD` is true only for debug builds. The screenshot-protection preference defaults to **on** in both debug and release; turn it off from Security when you need to capture screenshots during development.
 
 ## Project structure
@@ -142,14 +144,15 @@ app/src/main/java/app/locker/vault/
 
 ## Verified on device
 
-The signed, minified release build (`DEV_BUILD=false`, R8, version 1.3.0) was installed in place over 1.2.0 on an Android 17 Samsung phone (1080 × 2340):
+The signed release build (version 1.3.1; R8 disabled for this hotfix because the build host repeatedly hit native memory limits under concurrent builds) was installed in place over 1.3.0 on an Android 17 Samsung phone (1080 × 2340):
 
 - in-place update (`adb install -r`) with the real vault intact — no wipe and no re-onboarding
-- cold start after an app force-stop decrypts the existing vault again; the real video, photos, and notes created earlier are all listed (biometric unlock succeeds when the owner is present)
-- APK metadata verified: versionName 1.3.0 (versionCode 4), no INTERNET permission, three launcher disguises registered, and the same release signing certificate
+- the 1.3.0 crash when saving voice memos, scanned PDFs, or trimmed clips was reproduced from the crash buffer (`FileProvider` could not expose the cache root) and fixed by whitelisting `cache-path "."`; the compiled APK was inspected and contains all three declared cache paths
+- the new shield + keypad launcher icon and dark splash screen are packaged, and the launcher correctly resolves to the active disguise alias (Notes in this installation)
+- APK metadata verified: versionName 1.3.1 (versionCode 5), no INTERNET permission, three launcher disguises registered, and the same release signing certificate
 - unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), CSV import edge cases (quoted commas, embedded newlines, semicolons, BOM), password-generator guarantees, and the calculator disguise engine
 
-Version 1.2.0 had previously been exercised on the same device for the numeric recovery code, in-app video recording, offline password import, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
+Version 1.3.0 had previously been exercised on the same device for the calculator disguise, video thumbnails/playback, smart folders, and the new icon set. Version 1.2.0 was exercised for the numeric recovery code, in-app video recording, offline password import, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 
 The camera screens (video recording and document scanning), voice recorder, launcher disguises, duress flow, CSV/KeePass/1PUX import, smart folders, nested collections, and automatic backups compile in both debug and release and their static surfaces were verified on device. Their interactive flows should still be exercised by the vault owner because they depend on OEM camera, microphone, document-picker, and launcher behaviour.
 

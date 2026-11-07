@@ -2,4 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="share" path="share/" />
     <cache-path name="camera" path="camera/" />
+    <!-- Recorder, scanner, and video trimming write directly into the cache root. -->
+    <cache-path name="captures" path="." />
 </paths>

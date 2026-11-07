@@ -32,8 +32,8 @@ android {
         applicationId = "app.locker.vault"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.3.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -61,8 +61,11 @@ android {
             buildConfigField("boolean", "DEV_BUILD", "true")
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Hotfix build: R8 is disabled because the build machine repeatedly hit
+            // native memory limits under concurrent builds. Signing and behavior
+            // are identical to a normal release; only the APK size differs.
+            isMinifyEnabled = false
+            isShrinkResources = false
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

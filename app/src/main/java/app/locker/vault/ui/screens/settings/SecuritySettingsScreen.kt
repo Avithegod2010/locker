@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NoteAdd
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Visibility
@@ -303,7 +304,7 @@ fun SecuritySettingsScreen(
             icon = Icons.Rounded.Shield,
             tint = BrandViolet,
             title = "Disguised on the home screen",
-            text = "A disguise swaps the icon and the app name everywhere on this phone. Opening it still shows Locker's own lock screen — your data is unchanged and always encrypted."
+            text = "A disguise swaps the icon and the app name everywhere on this phone. Only one icon is shown at a time — the Calculator, Calendar, and Notes entries replace Locker's own. If your launcher keeps the old icon, tap Refresh launcher icon below. Opening a disguise still shows Locker's lock screen — your data stays encrypted."
         )
         Spacer(Modifier.height(10.dp))
         SettingsGroup {
@@ -326,6 +327,23 @@ fun SecuritySettingsScreen(
                     onClick = {
                         calculatorCode = ""
                         showCalculatorCode = true
+                    }
+                )
+            }
+            if (settings.disguiseMode != DisguiseManager.ID_NONE) {
+                RowDivider()
+                SettingRow(
+                    icon = Icons.Rounded.Refresh,
+                    tint = BrandMint,
+                    title = "Refresh launcher icon",
+                    subtitle = "Use this if your launcher still shows the old icon or name.",
+                    onClick = {
+                        DisguiseManager.refresh(context, settings.disguiseMode)
+                        android.widget.Toast.makeText(
+                            context,
+                            "Launcher refreshed — give it a few seconds",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 )
             }

@@ -3,6 +3,8 @@ package app.locker.vault.core
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 
 /**
  * Switches the launcher between the real Locker icon and disguised icons (Calculator,
@@ -78,5 +80,33 @@ object DisguiseManager {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         if (mainEnabled == expectedMain) return
         apply(context, id)
+    }
+
+    /**
+     * Some launchers (notably Samsung One UI) keep a cached icon after the alias switches.
+     * Briefly toggling the alias forces the launcher to reload the package entry.
+     */
+    fun refresh(context: Context, id: String) {
+        if (id == Disguise.ID_NONE) return
+        val aliasClass = aliases[id] ?: return
+        val pm = context.packageManager
+        val component = ComponentName(context.packageName, aliasClass)
+        val flags = PackageManager.DONT_KILL_APP
+        runCatching {
+            pm.setComponentEnabledSetting(
+                component,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                flags
+            )
+            Handler(Looper.getMainLooper()).postDelayed({
+                runCatching {
+                    pm.setComponentEnabledSetting(
+                        component,
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        flags
+                    )
+                }
+            }, 900L)
+        }
     }
 }

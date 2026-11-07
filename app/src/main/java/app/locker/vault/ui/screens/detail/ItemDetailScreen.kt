@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -36,10 +37,12 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StickyNote2
@@ -82,6 +85,9 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.core.Formatting
 import app.locker.vault.core.Totp
+import app.locker.vault.data.ExpiryBucket
+import app.locker.vault.data.PasswordAudit
+import app.locker.vault.data.PasswordHistoryEntry
 import app.locker.vault.data.VaultItem
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
@@ -128,6 +134,9 @@ fun ItemDetailScreen(
     var confirmShare by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var photoPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var revealHistory by remember { mutableStateOf(false) }
+    var restoreEntry by remember { mutableStateOf<PasswordHistoryEntry?>(null) }
+    var restoring by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(item?.mimeType?.ifBlank { "application/octet-stream" } ?: "application/octet-stream")
@@ -426,6 +435,33 @@ fun ItemDetailScreen(
                     }
                 }
 
+                if (item.expiresAt > 0L) {
+                    Spacer(Modifier.height(18.dp))
+                    ExpiryCard(item = item)
+                }
+
+                if (item.type == VaultType.SECRET && item.passwordHistory.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    PasswordHistoryCard(
+                        history = item.passwordHistory,
+                        reveal = revealHistory,
+                        onToggleReveal = { revealHistory = !revealHistory },
+                        onCopy = { password ->
+                            app.secureClipboard.copy(
+                                "Previous password",
+                                password,
+                                app.preferences.settings.value.clipboardClearSeconds
+                            )
+                            android.widget.Toast.makeText(
+                                context,
+                                "Previous password copied",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onRestore = { restoreEntry = it }
+                    )
+                }
+
                 if (itemCollections.isNotEmpty()) {
                     Spacer(Modifier.height(24.dp))
                     Text(
@@ -690,6 +726,210 @@ fun ItemDetailScreen(
                 TextButton(onClick = { confirmShare = false }) { Text("Cancel") }
             }
         )
+    }
+
+    if (restoreEntry != null) {
+        val entry = restoreEntry ?: return
+        AlertDialog(
+            onDismissRequest = { if (!restoring) restoreEntry = null },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            icon = { Icon(Icons.Rounded.Restore, contentDescription = null) },
+            title = { Text("Restore this password?") },
+            text = {
+                Text(
+                    "The current password is kept in history, so you can switch back again. The item's edited date will change.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !restoring,
+                    onClick = {
+                        restoring = true
+                        scope.launch {
+                            val result = app.repository.updateItem(item.copy(password = entry.password))
+                            restoring = false
+                            restoreEntry = null
+                            result.onSuccess {
+                                revealPassword = true
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Password restored",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }.onFailure {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Could not restore password",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (restoring) "Restoring…" else "Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { restoreEntry = null }, enabled = !restoring) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ExpiryCard(item: VaultItem) {
+    val bucket = PasswordAudit.expiryBucket(item.expiresAt) ?: return
+    val tint = when (bucket) {
+        ExpiryBucket.EXPIRED -> MaterialTheme.colorScheme.error
+        ExpiryBucket.SOON -> MaterialTheme.colorScheme.tertiary
+        ExpiryBucket.LATER -> MaterialTheme.colorScheme.primary
+    }
+    val label = when (bucket) {
+        ExpiryBucket.EXPIRED -> "Expired"
+        ExpiryBucket.SOON -> "Expires soon"
+        ExpiryBucket.LATER -> "Active"
+    }
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = tint.copy(alpha = 0.10f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.CalendarMonth,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "EXPIRY DATE",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    Formatting.dateOnly(item.expiresAt),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Surface(
+                shape = CircleShape,
+                color = tint.copy(alpha = 0.16f)
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tint,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PasswordHistoryCard(
+    history: List<PasswordHistoryEntry>,
+    reveal: Boolean,
+    onToggleReveal: () -> Unit,
+    onCopy: (String) -> Unit,
+    onRestore: (PasswordHistoryEntry) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.History,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "PASSWORD HISTORY",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onToggleReveal) {
+                    Text(
+                        if (reveal) "Hide" else "Reveal",
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Text(
+                "Previous passwords stay encrypted with this item. Restoring one moves the current password into history.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 17.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            history.forEachIndexed { index, entry ->
+                if (index > 0) {
+                    androidx.compose.material3.HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (reveal) entry.password else "•".repeat(entry.password.length.coerceIn(8, 22)),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = if (reveal) FontFamily.Monospace else FontFamily.Default,
+                                letterSpacing = if (reveal) 0.sp else 2.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            if (entry.changedAt > 0L) {
+                                "Changed ${Formatting.fullDate(entry.changedAt)}"
+                            } else {
+                                "Previous password"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { onCopy(entry.password) }) {
+                        Icon(
+                            Icons.Rounded.ContentCopy,
+                            contentDescription = "Copy previous password",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = { onRestore(entry) }) {
+                        Icon(
+                            Icons.Rounded.Restore,
+                            contentDescription = "Restore previous password",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

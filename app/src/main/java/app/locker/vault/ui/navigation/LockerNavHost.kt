@@ -34,6 +34,7 @@ import app.locker.vault.ui.screens.settings.GeneralSettingsScreen
 import app.locker.vault.ui.screens.settings.ImportPasswordsScreen
 import app.locker.vault.ui.screens.settings.PasswordHealthScreen
 import app.locker.vault.ui.screens.settings.SecuritySettingsScreen
+import app.locker.vault.ui.screens.settings.TagManagerScreen
 import app.locker.vault.ui.screens.trash.TrashScreen
 import app.locker.vault.ui.screens.viewer.PhotoViewerScreen
 import app.locker.vault.ui.screens.viewer.PdfViewerScreen
@@ -80,6 +81,9 @@ fun LockerNavHost() {
                 onOpenItem = { itemId -> navController.navigate(Routes.item(itemId)) },
                 onOpenCollection = { childId -> navController.navigate("collection/$childId") }
             )
+        }
+        composable(Routes.TAGS) {
+            TagManagerScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.TRASH) {
             TrashScreen(onBack = { navController.popBackStack() })

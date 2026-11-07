@@ -6,6 +6,7 @@ import android.net.Uri
 object Routes {
     const val HOME = "home"
     const val COLLECTIONS = "collections"
+    const val TAGS = "tags"
     const val TRASH = "trash"
     const val ARCHIVE = "archive"
     const val LEGACY = "legacy"

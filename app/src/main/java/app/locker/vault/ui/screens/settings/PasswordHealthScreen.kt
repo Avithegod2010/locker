@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.locker.vault.core.Formatting
 import app.locker.vault.data.PasswordAudit
 import app.locker.vault.data.PasswordIssue
 import app.locker.vault.data.VaultItem
@@ -53,6 +55,8 @@ fun PasswordHealthScreen(
     val weak = remember(active) { PasswordAudit.weakCount(active) }
     val reused = remember(active) { PasswordAudit.reusedCount(active) }
     val old = remember(active) { PasswordAudit.oldCount(active) }
+    val expired = remember(active) { PasswordAudit.expired(active) }
+    val expiringSoon = remember(active) { PasswordAudit.expiringSoon(active) }
 
     SettingsScaffold(title = "Password health", onBack = onBack) {
         Spacer(Modifier.height(6.dp))
@@ -69,24 +73,48 @@ fun PasswordHealthScreen(
             HealthStat("Reused", reused, BrandAmber, Modifier.weight(1f))
             HealthStat("Old", old, BrandViolet, Modifier.weight(1f))
         }
+        Spacer(Modifier.height(9.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            HealthStat("Expired", expired.size, BrandCoral, Modifier.weight(1f))
+            HealthStat("Expiring", expiringSoon.size, BrandAmber, Modifier.weight(1f))
+        }
 
         Spacer(Modifier.height(20.dp))
-        if (issues.isEmpty()) {
+        if (issues.isEmpty() && expired.isEmpty() && expiringSoon.isEmpty()) {
             EmptyState(
                 icon = Icons.Rounded.CheckCircle,
                 title = "Nothing to fix",
-                subtitle = "No weak, reused, common, or year-old passwords found in this vault."
+                subtitle = "No weak, reused, common, or year-old passwords found, and nothing is expiring soon."
             )
         } else {
-            Text(
-                "NEEDS ATTENTION",
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 6.dp, bottom = 9.dp)
-            )
-            issues.forEach { issue ->
-                IssueCard(issue = issue, onClick = { onOpenItem(issue.item) })
+            if (expired.isNotEmpty() || expiringSoon.isNotEmpty()) {
+                Text(
+                    "EXPIRING & EXPIRED",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 9.dp)
+                )
+                expired.forEach { item ->
+                    ExpiryIssueCard(item = item, expired = true, onClick = { onOpenItem(item) })
+                    Spacer(Modifier.height(8.dp))
+                }
+                expiringSoon.forEach { item ->
+                    ExpiryIssueCard(item = item, expired = false, onClick = { onOpenItem(item) })
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+            if (issues.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
+                Text(
+                    "PASSWORDS",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 9.dp)
+                )
+                issues.forEach { issue ->
+                    IssueCard(issue = issue, onClick = { onOpenItem(issue.item) })
+                    Spacer(Modifier.height(8.dp))
+                }
             }
         }
         Spacer(Modifier.height(34.dp))
@@ -177,6 +205,70 @@ private fun IssueCard(issue: PasswordIssue, onClick: () -> Unit) {
                 tint = BrandAmber.copy(alpha = 0.7f),
                 modifier = Modifier.size(18.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun ExpiryIssueCard(
+    item: VaultItem,
+    expired: Boolean,
+    onClick: () -> Unit
+) {
+    val tint = if (expired) BrandCoral else BrandAmber
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = tint.copy(alpha = 0.14f),
+                modifier = Modifier.size(42.dp)
+            ) {
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.CalendarMonth,
+                        contentDescription = null,
+                        tint = tint,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.size(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    if (expired) {
+                        "Expired ${Formatting.dateOnly(item.expiresAt)}"
+                    } else {
+                        "Expires ${Formatting.dateOnly(item.expiresAt)}"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Surface(
+                shape = CircleShape,
+                color = tint.copy(alpha = 0.13f)
+            ) {
+                Text(
+                    if (expired) "Expired" else "Soon",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tint,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                )
+            }
         }
     }
 }

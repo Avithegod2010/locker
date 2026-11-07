@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.4.1-release.apk` from the latest release.
+1. Install `Locker-1.5.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -17,11 +17,14 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 - **Five vault types** — Secret (passwords), Note, Thing (real-world item), File, and Photo.
 - **Strong encryption at rest** — every payload and file is authenticated and encrypted. Plaintext is never written to the vault database or vault file directory.
-- **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security.
+- **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security. Onboarding and the Security dialog share the same five-group formatting, and you can save a printable one-page **recovery kit PDF** with the key and step-by-step instructions.
 - **Backup and restore** — create one encrypted `.locker` archive, preview it, then merge or replace. Whole-archive integrity is verified before anything is changed.
 - **Biometric unlock** — hardware-backed Android Keystore key that requires a fresh authentication, running in a dedicated secure activity.
 - **Vault password changes** — re-wraps the vault key without touching any items; Argon2id parameters auto-upgrade on unlock.
 - **Passwords** — TOTP codes, custom fields, password health, offline audit, a configurable generator (length, digits, symbols, look-alike filter), tags, and website fields.
+- **Password history** — the previous 10 passwords for each login are kept encrypted with the item. You can reveal, copy, or restore an old password from the item screen; restoring pushes the current password into history.
+- **Expiry dates and dashboard** — give a secret or thing an optional expiry date (passports, insurance, cards, renewals). The item shows an Active / Expires soon / Expired card, and **Password health** lists everything expired or expiring within 30 days.
+- **Tag manager** — rename a tag everywhere from the drawer, merge it into an existing tag by renaming, or delete it from all items without touching the items themselves.
 - **Password-manager import** — offline import from Bitwarden, 1Password (CSV and .1pux), KeePass XML, LastPass, KeePassXC, Chrome/Edge, Firefox, Samsung Internet, and other CSV exports. You preview every row (with automatic duplicate detection) and choose what to import; folders that match an existing collection are filed there automatically, and TOTP secrets and notes come along.
 - **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. All three are usable: Calculator is a working calculator (enter the passcode and press `=`), Notes is a working notepad, and Calendar is a real month view — long-press the title in Notes or Calendar to enter the passcode. Your vault password is still required afterwards. Only one icon is shown at a time; if your launcher caches the old icon, use **Refresh launcher icon** in Security. Shortcuts and the home-screen widget follow the active alias.
 - **Duress password (non-destructive)** — an optional second password that opens a separate decoy vault with its own keys, database, and files. Your real vault stays encrypted and untouched, and your normal password still opens it. Resetting the duress password rebuilds the decoy with fresh example entries.
@@ -98,6 +101,8 @@ Run the unit tests:
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
+The same command runs in GitHub Actions on every push and pull request (`.github/workflows/android.yml`), and the HTML report is uploaded as a build artifact.
+
 Install the debug build:
 
 ```powershell
@@ -125,7 +130,7 @@ Build it with:
 
 The release variant is minified with R8, has `DEV_BUILD=false`, and defaults screenshot protection to **on**.
 
-The **1.3.1 hotfix, 1.4.0, and 1.4.1** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
+The **1.3.1 hotfix, 1.4.0, 1.4.1, and 1.5.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
 
 `BuildConfig.DEV_BUILD` is true only for debug builds. The screenshot-protection preference defaults to **on** in both debug and release; turn it off from Security when you need to capture screenshots during development.
 
@@ -169,7 +174,7 @@ Version 1.3.x had previously been exercised on the same device for the calculato
 - Collections support nesting, saved searches, icons, and Home pins; per-collection locks and smart rules beyond saved queries are not implemented.
 - Passkeys, encrypted QR transfer, import from Bitwarden/1Password JSON or Dashlane ZIP, manual column remapping, and tablet two-pane layouts are not implemented yet.
 - Automatic backups are triggered on unlock (no WorkManager scheduling), run at most once a day, and only after a password unlock (not after a biometric-only unlock).
-- Password history and expiry notifications are not implemented yet.
+- Password history and expiry dates are stored per item; there are no push notifications or reminders for upcoming expiries — they appear in **Password health** when you open the app.
 - The duress password opens a decoy vault; it does not erase the real vault. Deleting the duress password deletes the decoy only.
 - Autofill is designed for the unlocked vault and does not yet require a per-fill biometric prompt.
 - English UI only.

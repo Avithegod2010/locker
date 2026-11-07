@@ -80,7 +80,8 @@ class VaultRepository(
         fields: List<CustomField> = emptyList(),
         collectionIds: List<String> = emptyList(),
         favorite: Boolean = false,
-        parentId: String = ""
+        parentId: String = "",
+        expiresAt: Long = 0L
     ): Result<VaultItem> = runCatching {
         withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
@@ -102,7 +103,8 @@ class VaultRepository(
                     collectionIds = collectionIds.distinct(),
                     parentId = parentId,
                     createdAt = now,
-                    updatedAt = now
+                    updatedAt = now,
+                    expiresAt = expiresAt.coerceAtLeast(0L)
                 )
                 writeMutex.withLock {
                     upsertItemLocked(key, item)
@@ -169,19 +171,43 @@ class VaultRepository(
         return migrated
     }
 
-    suspend fun updateItem(item: VaultItem): Result<VaultItem> = runCatching {        withContext(Dispatchers.IO) {
+    suspend fun updateItem(item: VaultItem): Result<VaultItem> = runCatching {
+        withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
             try {
-                val updated = item.copy(
+                val now = System.currentTimeMillis()
+                val normalized = item.copy(
                     title = item.title.trim().ifBlank { defaultTitle(item.type) },
                     tags = cleanTags(item.tags),
                     fields = cleanFields(item.fields),
                     collectionIds = item.collectionIds.distinct(),
-                    updatedAt = System.currentTimeMillis()
+                    expiresAt = item.expiresAt.coerceAtLeast(0L),
+                    updatedAt = now
                 )
-                writeMutex.withLock {
-                    upsertItemLocked(key, updated)
+                val updated = writeMutex.withLock {
+                    // Read the current record so a password change records the *actual* old
+                    // password, even if the editor was opened before another edit landed.
+                    val previous = db.readItems()
+                        .firstOrNull { it.id == normalized.id }
+                        ?.let { decodeItem(it, key) }
+                    val withHistory = if (
+                        previous != null &&
+                        previous.password != normalized.password &&
+                        previous.password.isNotBlank()
+                    ) {
+                        normalized.copy(
+                            passwordHistory = PasswordHistory.append(
+                                normalized.passwordHistory,
+                                previous.password,
+                                now
+                            )
+                        )
+                    } else {
+                        normalized
+                    }
+                    upsertItemLocked(key, withHistory)
                     reload(key)
+                    withHistory
                 }
                 updated
             } finally {
@@ -817,6 +843,71 @@ class VaultRepository(
         }
     }
 
+    /**
+     * Renames a tag everywhere, merging into an existing target tag when one already exists.
+     * Returns the number of items changed.
+     */
+    suspend fun renameTag(from: String, to: String): Result<Int> = runCatching {
+        withContext(Dispatchers.IO) {
+            val key = session.requireMasterKey()
+            try {
+                val oldTag = cleanTags(listOf(from)).firstOrNull() ?: return@withContext 0
+                val newTag = cleanTags(listOf(to)).firstOrNull() ?: return@withContext 0
+                if (oldTag.equals(newTag, ignoreCase = true)) return@withContext 0
+                var changed = 0
+                writeMutex.withLock {
+                    db.readItems().forEach { row ->
+                        val item = decodeItem(row, key) ?: return@forEach
+                        if (item.deletedAt != null) return@forEach
+                        if (item.tags.none { it.equals(oldTag, ignoreCase = true) }) return@forEach
+                        val tags = item.tags
+                            .map { if (it.equals(oldTag, ignoreCase = true)) newTag else it }
+                            .distinctBy { it.lowercase() }
+                        upsertItemLocked(
+                            key,
+                            item.copy(tags = tags, updatedAt = System.currentTimeMillis())
+                        )
+                        changed++
+                    }
+                    reload(key)
+                }
+                changed
+            } finally {
+                Crypto.wipe(key)
+            }
+        }
+    }
+
+    /** Removes a tag from every vault item. Returns the number of items changed. */
+    suspend fun deleteTag(tag: String): Result<Int> = runCatching {
+        withContext(Dispatchers.IO) {
+            val key = session.requireMasterKey()
+            try {
+                val cleaned = cleanTags(listOf(tag)).firstOrNull() ?: return@withContext 0
+                var changed = 0
+                writeMutex.withLock {
+                    db.readItems().forEach { row ->
+                        val item = decodeItem(row, key) ?: return@forEach
+                        if (item.deletedAt != null) return@forEach
+                        if (item.tags.none { it.equals(cleaned, ignoreCase = true) }) return@forEach
+                        upsertItemLocked(
+                            key,
+                            item.copy(
+                                tags = item.tags.filterNot { it.equals(cleaned, ignoreCase = true) },
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                        changed++
+                    }
+                    reload(key)
+                }
+                changed
+            } finally {
+                Crypto.wipe(key)
+            }
+        }
+    }
+
     private fun cleanTags(tags: List<String>): List<String> = tags
         .map { it.trim().removePrefix("#") }
         .filter { it.isNotBlank() }
@@ -938,6 +1029,19 @@ class VaultRepository(
                     }
                 }
             }
+            val passwordHistory = mutableListOf<PasswordHistoryEntry>()
+            json.optJSONArray("passwordHistory")?.let { array ->
+                for (i in 0 until array.length()) {
+                    val entry = array.optJSONObject(i) ?: continue
+                    val password = entry.optString("password")
+                    if (password.isNotBlank()) {
+                        passwordHistory += PasswordHistoryEntry(
+                            password = password,
+                            changedAt = entry.optLong("changedAt", 0L)
+                        )
+                    }
+                }
+            }
             VaultItem(
                 id = row.id,
                 type = VaultType.valueOf(row.type),
@@ -963,7 +1067,9 @@ class VaultRepository(
                 createdAt = row.createdAt,
                 updatedAt = row.updatedAt,
                 archivedAt = json.optLong("archivedAt", 0L).takeIf { it > 0L },
-                deletedAt = row.deletedAt
+                deletedAt = row.deletedAt,
+                expiresAt = json.optLong("expiresAt", 0L).coerceAtLeast(0L),
+                passwordHistory = passwordHistory
             )
         } catch (_: Exception) {
             null
@@ -1023,8 +1129,21 @@ class VaultRepository(
             .put("contentHash", item.contentHash)
             .put("favorite", item.favorite)
             .put("archivedAt", item.archivedAt ?: 0L)
+            .put("expiresAt", item.expiresAt)
             .put("tags", JSONArray(item.tags))
             .put("parentId", item.parentId)
+            .put(
+                "passwordHistory",
+                JSONArray().apply {
+                    item.passwordHistory.forEach { entry ->
+                        put(
+                            JSONObject()
+                                .put("password", entry.password)
+                                .put("changedAt", entry.changedAt)
+                        )
+                    }
+                }
+            )
             .put(
                 "fields",
                 JSONArray().apply {

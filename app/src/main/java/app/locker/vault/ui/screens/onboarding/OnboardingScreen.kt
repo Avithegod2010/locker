@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.R
+import app.locker.vault.core.RecoveryCodeFormat
 import app.locker.vault.core.SessionManager
 import app.locker.vault.core.SessionState
 import app.locker.vault.core.UnlockResult
@@ -537,29 +538,10 @@ fun RecoveryKeyScreen() {
     var answer2 by remember { mutableStateOf("") }
     var verifyError by remember { mutableStateOf<String?>(null) }
     val rawCode = code ?: ""
-    val groups = remember(rawCode) {
-        // Numeric recovery codes are 25 digits, displayed and grouped in fives.
-        rawCode.replace(" ", "").chunked(5)
-    }
-    val expected = remember(groups) {
-        listOf(
-            groups.getOrNull(1).orEmpty(),
-            groups.getOrNull(3).orEmpty()
-        )
-    }
-    val display = remember(rawCode) {
-        if (rawCode.isBlank()) "" else rawCode.replace(" ", "").chunked(5)
-            .joinToString(" ")
-    }
-
-    fun normalize(value: String) = value.replace(" ", "").replace("\n", "").uppercase()
+    val display = remember(rawCode) { RecoveryCodeFormat.display(rawCode) }
 
     fun verify(): Boolean {
-        val answers = listOf(answer1, answer2)
-        val ok = expected.indices.all { index ->
-            val answer = normalize(answers[index])
-            answer.isNotEmpty() && answer == normalize(expected[index])
-        }
+        val ok = RecoveryCodeFormat.verify(rawCode, listOf(answer1, answer2))
         if (!ok) {
             verifyError = "Those groups don't match the recovery key. Check your written copy."
             return false

@@ -7,7 +7,11 @@ data class PasswordIssue(
     val reasons: List<String>
 )
 
+enum class ExpiryBucket { EXPIRED, SOON, LATER }
+
 object PasswordAudit {
+    const val EXPIRING_SOON_DAYS = 30
+
     private val common = setOf(
         "123456", "123456789", "qwerty", "password", "111111", "123123",
         "abc123", "password1", "iloveyou", "admin", "welcome", "monkey",
@@ -134,6 +138,39 @@ object PasswordAudit {
     fun oldCount(items: List<VaultItem>): Int = items.count {
         it.type == VaultType.SECRET && it.password.isNotBlank() &&
             System.currentTimeMillis() - it.updatedAt > TimeUnit.DAYS.toMillis(365)
+    }
+
+    /** Items with an expiry date that has already passed. */
+    fun expired(items: List<VaultItem>, now: Long = System.currentTimeMillis()): List<VaultItem> =
+        items.filter { it.deletedAt == null && it.expiresAt in 1..now }
+            .sortedBy { it.expiresAt }
+
+    /** Items expiring within the next [EXPIRING_SOON_DAYS] days. */
+    fun expiringSoon(
+        items: List<VaultItem>,
+        now: Long = System.currentTimeMillis(),
+        windowDays: Int = EXPIRING_SOON_DAYS
+    ): List<VaultItem> {
+        val end = now + TimeUnit.DAYS.toMillis(windowDays.toLong())
+        return items.filter { it.deletedAt == null && it.expiresAt in (now + 1)..end }
+            .sortedBy { it.expiresAt }
+    }
+
+    fun expiredCount(items: List<VaultItem>, now: Long = System.currentTimeMillis()): Int =
+        expired(items, now).size
+
+    fun expiringSoonCount(items: List<VaultItem>, now: Long = System.currentTimeMillis()): Int =
+        expiringSoon(items, now).size
+
+    /** Classifies an expiry date for badges and cards, or null when the item never expires. */
+    fun expiryBucket(
+        expiresAt: Long,
+        now: Long = System.currentTimeMillis()
+    ): ExpiryBucket? {
+        if (expiresAt <= 0L) return null
+        if (expiresAt <= now) return ExpiryBucket.EXPIRED
+        val end = now + TimeUnit.DAYS.toMillis(EXPIRING_SOON_DAYS.toLong())
+        return if (expiresAt <= end) ExpiryBucket.SOON else ExpiryBucket.LATER
     }
 
     private fun Int?.orZero(): Int = this ?: 0

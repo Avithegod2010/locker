@@ -20,6 +20,12 @@ data class CustomField(
     val sensitive: Boolean = false
 )
 
+/** A previous password, kept encrypted as part of the item payload. Newest first. */
+data class PasswordHistoryEntry(
+    val password: String,
+    val changedAt: Long
+)
+
 data class VaultItem(
     val id: String,
     val type: VaultType,
@@ -45,7 +51,10 @@ data class VaultItem(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val archivedAt: Long? = null,
-    val deletedAt: Long? = null
+    val deletedAt: Long? = null,
+    /** Epoch millis for the expiry date, or 0 when the item does not expire. */
+    val expiresAt: Long = 0L,
+    val passwordHistory: List<PasswordHistoryEntry> = emptyList()
 ) {
     val isImage: Boolean
         get() = mimeType.startsWith("image/") || (type == VaultType.PHOTO && mimeType.isBlank())

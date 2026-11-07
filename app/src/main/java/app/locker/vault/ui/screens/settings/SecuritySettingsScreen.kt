@@ -57,6 +57,8 @@ import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.core.Crypto
 import app.locker.vault.core.DeviceIntegrity
 import app.locker.vault.core.DisguiseManager
+import app.locker.vault.core.RecoveryCodeFormat
+import app.locker.vault.core.RecoveryKitPdf
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.LockerTextField
@@ -82,6 +84,29 @@ fun SecuritySettingsScreen(
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     SecureWindow()
+
+    var recoveryKitCode by remember { mutableStateOf<String?>(null) }
+    val recoveryKitLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        val code = recoveryKitCode
+        recoveryKitCode = null
+        if (uri == null || code == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        RecoveryKitPdf.write(output, code)
+                    } != null
+                }.getOrDefault(false)
+            }
+            android.widget.Toast.makeText(
+                context,
+                if (ok) "Recovery kit saved" else "Could not save recovery kit",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     val biometricLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -521,6 +546,35 @@ fun SecuritySettingsScreen(
                     }
                 }
             )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.NoteAdd,
+                tint = BrandBlue,
+                title = "Save recovery kit (PDF)",
+                subtitle = "Print a one-page kit with the key and recovery instructions.",
+                onClick = {
+                    val master = runCatching { app.session.requireMasterKey() }.getOrNull()
+                    if (master == null) {
+                        android.widget.Toast.makeText(context, "Unlock the vault first", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        val code = try {
+                            app.keyMaterialStore.recoveryCodeCopy(master)
+                        } finally {
+                            Crypto.wipe(master)
+                        }
+                        if (code == null) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "No stored recovery key copy (older vault)",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            recoveryKitCode = code
+                            recoveryKitLauncher.launch("Locker-recovery-kit.pdf")
+                        }
+                    }
+                }
+            )
         }
 
         SettingsSectionTitle("Intrusion protection")
@@ -736,14 +790,8 @@ fun SecuritySettingsScreen(
 private fun RecoveryKeyDialog(code: String, onDismiss: () -> Unit) {
     val app = LocalAppContainer.current
     val context = LocalContext.current
-    val cleaned = code.replace(" ", "")
-    val formatted = remember(code) {
-        if (cleaned.length == 25) {
-            cleaned.chunked(5).joinToString(" ")
-        } else {
-            cleaned.chunked(4).chunked(5).joinToString("\n") { it.joinToString(" ") }
-        }
-    }
+    val cleaned = RecoveryCodeFormat.normalize(code)
+    val formatted = remember(code) { RecoveryCodeFormat.display(code) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

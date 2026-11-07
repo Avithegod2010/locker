@@ -1,5 +1,6 @@
 package app.locker.vault.ui.screens.editor
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Image
@@ -40,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,6 +76,7 @@ import app.locker.vault.ui.theme.BrandBlue
 import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import kotlin.math.roundToInt
 
 @Composable
@@ -135,6 +140,9 @@ fun TextEditorScreen(
     var selectedCollections by remember(itemId, effectiveType) {
         mutableStateOf(existing?.collectionIds ?: emptyList())
     }
+    var expiresAt by remember(itemId, effectiveType) {
+        mutableLongStateOf(existing?.expiresAt ?: 0L)
+    }
     var revealPassword by rememberSaveable(itemId, effectiveType) { mutableStateOf(false) }
     var showGeneratorOptions by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -165,7 +173,8 @@ fun TextEditorScreen(
                     tags = tags,
                     fields = customFields,
                     collectionIds = selectedCollections.toList(),
-                    favorite = favorite
+                    favorite = favorite,
+                    expiresAt = expiresAt
                 )
             } else {
                 app.repository.updateItem(
@@ -180,7 +189,8 @@ fun TextEditorScreen(
                         tags = tags,
                         fields = customFields,
                         favorite = favorite,
-                        collectionIds = selectedCollections.toList()
+                        collectionIds = selectedCollections.toList(),
+                        expiresAt = expiresAt
                     )
                 )
             }
@@ -437,6 +447,15 @@ fun TextEditorScreen(
             )
         }
 
+        if (effectiveType == VaultType.SECRET || effectiveType == VaultType.THING) {
+            Spacer(Modifier.height(22.dp))
+            ExpiryPicker(
+                value = expiresAt,
+                onChange = { expiresAt = it },
+                onClear = { expiresAt = 0L }
+            )
+        }
+
         Spacer(Modifier.height(22.dp))
         CollectionsSelector(
             collections = collections,
@@ -507,6 +526,88 @@ fun TextEditorScreen(
             )
         }
         Spacer(Modifier.height(14.dp))
+    }
+}
+
+@Composable
+private fun ExpiryPicker(
+    value: Long,
+    onChange: (Long) -> Unit,
+    onClear: () -> Unit
+) {
+    val context = LocalContext.current
+    fun openPicker() {
+        val calendar = Calendar.getInstance()
+        if (value > 0L) calendar.timeInMillis = value
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                val picked = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, day)
+                    set(Calendar.HOUR_OF_DAY, 23)
+                    set(Calendar.MINUTE, 59)
+                    set(Calendar.SECOND, 59)
+                    set(Calendar.MILLISECOND, 999)
+                }
+                onChange(picked.timeInMillis)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    Surface(
+        onClick = { openPicker() },
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.CalendarMonth,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "EXPIRY DATE",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    if (value > 0L) "Expires ${Formatting.dateOnly(value)}" else "No expiry date",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "Optional. Passport, insurance, cards, and renewals appear on the health dashboard.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+            if (value > 0L) {
+                TextButton(onClick = onClear) {
+                    Text("Clear", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Text(
+                    "Set",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 

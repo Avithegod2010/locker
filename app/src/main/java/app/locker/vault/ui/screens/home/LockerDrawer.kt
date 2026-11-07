@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Sell
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Star
@@ -169,6 +170,7 @@ fun DrawerContent(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DrawerRow(Icons.Rounded.Person, "Account", { onNavigate(Routes.ACCOUNT) })
+            DrawerRow(Icons.Rounded.Sell, "Tags", { onNavigate(Routes.TAGS) })
             DrawerRow(Icons.Rounded.Archive, "Archive", { onNavigate(Routes.ARCHIVE) })
             DrawerRow(Icons.Rounded.PlayCircle, "Photo slideshow", { onNavigate(Routes.SLIDESHOW) })
             DrawerRow(Icons.Rounded.Shield, "Security", { onNavigate(Routes.SECURITY) })
@@ -201,7 +203,7 @@ fun DrawerContent(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Locker 1.1 · No network permission",
+            "Locker 1.5.0 · No network permission",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
             modifier = Modifier

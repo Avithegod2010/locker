@@ -12,6 +12,8 @@ object Formatting {
 
     fun fullDate(epochMillis: Long): String = dateTime.format(Date(epochMillis))
 
+    fun dateOnly(epochMillis: Long): String = date.format(Date(epochMillis))
+
     fun relativeDate(epochMillis: Long): String {
         val now = System.currentTimeMillis()
         val diff = now - epochMillis

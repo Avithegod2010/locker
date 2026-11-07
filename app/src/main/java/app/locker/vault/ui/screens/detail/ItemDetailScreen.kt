@@ -1,5 +1,6 @@
 package app.locker.vault.ui.screens.detail
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
@@ -83,9 +85,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.core.Formatting
 import app.locker.vault.core.Totp
 import app.locker.vault.data.ExpiryBucket
+import app.locker.vault.data.ItemHistoryEntry
 import app.locker.vault.data.PasswordAudit
 import app.locker.vault.data.PasswordHistoryEntry
 import app.locker.vault.data.VaultItem
@@ -114,6 +118,7 @@ fun ItemDetailScreen(
     onViewVideo: (VaultItem) -> Unit,
     onViewPdf: (VaultItem) -> Unit,
     onEditImage: (VaultItem) -> Unit,
+    onRedactPhoto: (VaultItem) -> Unit,
     onOpenAttachment: (VaultItem) -> Unit
 ) {
     val app = LocalAppContainer.current
@@ -137,6 +142,27 @@ fun ItemDetailScreen(
     var revealHistory by remember { mutableStateOf(false) }
     var restoreEntry by remember { mutableStateOf<PasswordHistoryEntry?>(null) }
     var restoring by remember { mutableStateOf(false) }
+    var restoreVersion by remember { mutableStateOf<ItemHistoryEntry?>(null) }
+    var restoringVersion by remember { mutableStateOf(false) }
+    var itemUnlocked by remember(itemId, item?.requireBiometric) {
+        mutableStateOf(item?.requireBiometric != true)
+    }
+    var unlocking by remember { mutableStateOf(false) }
+
+    val biometricLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        unlocking = false
+        if (result.resultCode == Activity.RESULT_OK) {
+            itemUnlocked = true
+        } else {
+            android.widget.Toast.makeText(
+                context,
+                "Biometric confirmation was cancelled",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(item?.mimeType?.ifBlank { "application/octet-stream" } ?: "application/octet-stream")
@@ -213,8 +239,8 @@ fun ItemDetailScreen(
         return
     }
 
-    LaunchedEffect(item.id, item.isImage) {
-        if (item.isImage) {
+    LaunchedEffect(item.id, item.isImage, itemUnlocked) {
+        if (item.isImage && itemUnlocked) {
             photoPreview = withContext(Dispatchers.IO) {
                 runCatching {
                     val bytes = app.repository.readImage(item)
@@ -289,19 +315,21 @@ fun ItemDetailScreen(
                             }
                         )
                     }
-                    IconButton(onClick = { onEdit(item) }) {
+                    IconButton(onClick = { if (itemUnlocked) onEdit(item) }, enabled = itemUnlocked) {
                         Icon(
                             Icons.Rounded.Edit,
                             contentDescription = "Edit",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (itemUnlocked) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                         )
                     }
                     Box {
-                        IconButton(onClick = { menuOpen = true }) {
+                        IconButton(onClick = { if (itemUnlocked) menuOpen = true }, enabled = itemUnlocked) {
                             Icon(
                                 Icons.Rounded.MoreVert,
                                 contentDescription = "More actions",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (itemUnlocked) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                             )
                         }
                         DropdownMenu(
@@ -316,6 +344,16 @@ fun ItemDetailScreen(
                                     onClick = {
                                         menuOpen = false
                                         onEditImage(item)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Redact photo") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.VisibilityOff, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onRedactPhoto(item)
                                     }
                                 )
                             }
@@ -384,6 +422,26 @@ fun ItemDetailScreen(
                     .padding(horizontal = 20.dp)
             ) {
                 Spacer(Modifier.height(10.dp))
+
+                if (item.requireBiometric && !itemUnlocked) {
+                    BiometricLockedCard(
+                        available = app.biometricKeyStore.canAuthenticate(),
+                        unlocking = unlocking,
+                        onUnlock = {
+                            if (!unlocking) {
+                                unlocking = true
+                                val intent = Intent(
+                                    context,
+                                    BiometricAuthActivity::class.java
+                                ).putExtra(
+                                    BiometricAuthActivity.EXTRA_MODE,
+                                    BiometricAuthActivity.MODE_CONFIRM
+                                )
+                                biometricLauncher.launch(intent)
+                            }
+                        }
+                    )
+                } else {
 
                 when (item.type) {
                     VaultType.SECRET -> SecretDetail(
@@ -459,6 +517,14 @@ fun ItemDetailScreen(
                             ).show()
                         },
                         onRestore = { restoreEntry = it }
+                    )
+                }
+
+                if (item.history.isNotEmpty()) {
+                    Spacer(Modifier.height(20.dp))
+                    ItemHistoryCard(
+                        history = item.history,
+                        onRestore = { restoreVersion = it }
                     )
                 }
 
@@ -639,6 +705,8 @@ fun ItemDetailScreen(
                     }
                 }
 
+                }
+
                 Spacer(Modifier.height(26.dp))
                 Text(
                     "Created ${Formatting.fullDate(item.createdAt)}",
@@ -775,6 +843,136 @@ fun ItemDetailScreen(
                 TextButton(onClick = { restoreEntry = null }, enabled = !restoring) { Text("Cancel") }
             }
         )
+    }
+
+    if (restoreVersion != null) {
+        val entry = restoreVersion ?: return
+        AlertDialog(
+            onDismissRequest = { if (!restoringVersion) restoreVersion = null },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            icon = { Icon(Icons.Rounded.Restore, contentDescription = null) },
+            title = { Text("Restore this version?") },
+            text = {
+                Text(
+                    "The current version is saved into Previous versions first, so you can switch back again. Tags, collections, expiry, and importance stay as they are.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !restoringVersion,
+                    onClick = {
+                        restoringVersion = true
+                        scope.launch {
+                            val result = app.repository.updateItem(
+                                item.copy(
+                                    title = entry.title,
+                                    body = entry.body,
+                                    username = entry.username,
+                                    password = entry.password,
+                                    location = entry.location,
+                                    website = entry.website,
+                                    otpSecret = entry.otpSecret,
+                                    fields = entry.fields
+                                )
+                            )
+                            restoringVersion = false
+                            restoreVersion = null
+                            result.onSuccess {
+                                revealPassword = false
+                                revealHistory = false
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Version restored",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }.onFailure {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Could not restore version",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (restoringVersion) "Restoring…" else "Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { restoreVersion = null },
+                    enabled = !restoringVersion
+                ) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BiometricLockedCard(
+    available: Boolean,
+    unlocking: Boolean,
+    onUnlock: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 36.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                modifier = Modifier.size(68.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.Fingerprint,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "This item is locked",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                if (available) {
+                    "Confirm your fingerprint to show its contents, copy fields, or open attachments."
+                } else {
+                    "Biometric unlock is unavailable. Enrol a fingerprint or face in system settings, then try again."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(18.dp))
+            Surface(
+                onClick = onUnlock,
+                enabled = available && !unlocking,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Text(
+                    if (unlocking) "Waiting for biometrics…" else "Unlock with biometrics",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 11.dp)
+                )
+            }
+        }
     }
 }
 
@@ -926,6 +1124,79 @@ private fun PasswordHistoryCard(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(19.dp)
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItemHistoryCard(
+    history: List<ItemHistoryEntry>,
+    onRestore: (ItemHistoryEntry) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.History,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "PREVIOUS VERSIONS",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Up to 10 earlier versions are kept encrypted with this item. Restoring one saves the current version into this list.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 17.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            history.forEachIndexed { index, entry ->
+                if (index > 0) {
+                    androidx.compose.material3.HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            entry.title.ifBlank { "Untitled" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            if (entry.changedAt > 0L) {
+                                "Replaced ${Formatting.fullDate(entry.changedAt)}"
+                            } else {
+                                "Earlier version"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = { onRestore(entry) }) {
+                        Text("Restore", color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

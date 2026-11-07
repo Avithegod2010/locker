@@ -16,6 +16,7 @@ import app.locker.vault.core.AppPreferences
 import app.locker.vault.core.AutoBackupRunner
 import app.locker.vault.core.BiometricKeyStore
 import app.locker.vault.core.Crypto
+import app.locker.vault.core.CrashReporter
 import app.locker.vault.core.DisguiseManager
 import app.locker.vault.core.KeyMaterialStore
 import app.locker.vault.core.PlaybackMemory
@@ -396,6 +397,7 @@ class LockerApp : Application(), DefaultLifecycleObserver {
 
     override fun onCreate() {
         super<Application>.onCreate()
+        CrashReporter.install(this)
         container = AppContainer(this)
         // Keep a chosen launcher disguise in sync after updates or restores.
         DisguiseManager.ensureApplied(this, container.preferences.settings.value.disguiseMode)

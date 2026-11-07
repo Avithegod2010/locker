@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.5.0-release.apk` from the latest release.
+1. Install `Locker-1.6.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -23,22 +23,26 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 - **Vault password changes** — re-wraps the vault key without touching any items; Argon2id parameters auto-upgrade on unlock.
 - **Passwords** — TOTP codes, custom fields, password health, offline audit, a configurable generator (length, digits, symbols, look-alike filter), tags, and website fields.
 - **Password history** — the previous 10 passwords for each login are kept encrypted with the item. You can reveal, copy, or restore an old password from the item screen; restoring pushes the current password into history.
+- **Previous versions** — secrets and notes keep their last 10 encrypted title/notes/login snapshots. Restore an earlier version from the item screen; the current version is saved first so you can switch back.
+- **Item templates** — start a login, Wi-Fi network, bank account, insurance policy, ID/passport, or note from a structured template. Custom fields stay editable, and you can attach photos to any item.
+- **Per-item biometric gate** — require a fresh fingerprint before a protected secret, note, or file shows its contents, allows copies, or opens attachments. Protected items are deliberately excluded from autofill.
 - **Expiry dates and dashboard** — give a secret or thing an optional expiry date (passports, insurance, cards, renewals). The item shows an Active / Expires soon / Expired card, and **Password health** lists everything expired or expiring within 30 days.
 - **Tag manager** — rename a tag everywhere from the drawer, merge it into an existing tag by renaming, or delete it from all items without touching the items themselves.
-- **Password-manager import** — offline import from Bitwarden, 1Password (CSV and .1pux), KeePass XML, LastPass, KeePassXC, Chrome/Edge, Firefox, Samsung Internet, and other CSV exports. You preview every row (with automatic duplicate detection) and choose what to import; folders that match an existing collection are filed there automatically, and TOTP secrets and notes come along.
+- **Password-manager import** — offline import from Bitwarden (CSV and JSON), 1Password (CSV and .1pux), KeePass XML, LastPass, KeePassXC, Dashlane/ZIP CSV, Chrome/Edge, Firefox, Samsung Internet, and other CSV exports. You preview every row (with automatic duplicate detection) and choose what to import; folders that match an existing collection are filed there automatically, and TOTP secrets and notes come along. **Import TOTP QR** reads a single `otpauth://` link or a Google Authenticator migration QR from a screenshot or photo.
 - **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. All three are usable: Calculator is a working calculator (enter the passcode and press `=`), Notes is a working notepad, and Calendar is a real month view — long-press the title in Notes or Calendar to enter the passcode. Your vault password is still required afterwards. Only one icon is shown at a time; if your launcher caches the old icon, use **Refresh launcher icon** in Security. Shortcuts and the home-screen widget follow the active alias.
 - **Duress password (non-destructive)** — an optional second password that opens a separate decoy vault with its own keys, database, and files. Your real vault stays encrypted and untouched, and your normal password still opens it. Resetting the duress password rebuilds the decoy with fresh example entries.
 - **In-app video recording** — the secure camera has Photo and Video modes, records MP4 with optional audio (microphone permission is requested on first video use), and saves the clip straight into the encrypted vault with no gallery copy. Videos get encrypted thumbnails, resume where you left off, remember playback speed, and can be trimmed in place with an automatic “(original)” copy kept in the vault.
 - **Voice memos** — record encrypted audio notes with a live waveform, pause and resume mid-recording, then play them back with a waveform scrubber and 0.5×–2× speed.
 - **Document scanner** — capture several pages, auto-trim the borders, reorder pages, and save one encrypted PDF straight into the vault.
-- **Media** — multi-select photo/video import, encrypted video playback, secure in-app camera, PDF viewer, OCR search, rotation, redaction, and a slideshow.
+- **Media** — multi-select photo/video import, encrypted video playback, secure in-app camera, PDF viewer, OCR search, rotation, draw-and-save photo redaction, and a slideshow. Image imports strip GPS coordinates and camera/device EXIF tags before anything is encrypted.
+- **Local diagnostics** — an app-private crash log with build details, visible under **About → Diagnostics** and exportable as a plain text file through the system picker. No network path exists.
 - **Nested collections and smart folders** — collections can contain subcollections; any search (`type:secret tag:bank`) can be saved as a smart folder, renamed, given an icon, and pinned to Home.
 - **Daily automatic backups** — optional encrypted `.locker` snapshots into a folder you choose, at most once a day after a password unlock, rotating the last N archives. Every automatic snapshot is read back and verified before it replaces the previous one, and **Verify latest snapshot** runs a restore drill without touching the vault. Fully offline.
 - **Quick-capture widget actions** — the home-screen widget can open a new note or the camera, and lock the vault.
 - **Collections, tags, Important, and Archive** — group items, cut across collections with tags, bulk-select, and hide things without deleting them.
 - **Search and filters** — search across titles, usernames, notes, locations, filenames, OCR text, tags, custom fields, types, and collections; supports `type:`, `tag:`, `before:`, and `after:`.
 - **Share target and open-with** — send files, photos, videos, PDFs, or text to Locker from any app, or open supported files directly.
-- **Autofill** — fill saved logins in other apps while the vault is unlocked.
+- **Autofill** — fill saved logins in other apps while the vault is unlocked. Matching understands full URLs, subdomains, app packages, and common field hints; saving an autofilled password updates the matching login instead of creating a duplicate.
 - **Quick Settings tile, shortcuts, and a home-screen widget** — lock instantly, jump to a new note or secret, or open/lock from the launcher.
 - **Haptics** — subtle tactile feedback on cards, chips, and primary actions, with a toggle in Appearance.
 - **Files** — import any document, open it after decryption, share a temporary decrypted copy (with warning), or export it through the system file picker.
@@ -67,6 +71,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 | Profile | Encrypted in the vault database |
 | Biometrics | AES-256-GCM key in Android Keystore, `setUserAuthenticationRequired(true)`, confirmation required, invalidated by new biometric enrollment |
 | Database | SQLite stores only ids, item types, timestamps, and encrypted payload blobs |
+| Diagnostics | Crash reports stay in an app-private file, capped in size, removable from **About → Diagnostics** |
 | Backups | Android backup and device transfer are disabled |
 | Network | No `INTERNET` permission in the manifest |
 
@@ -128,9 +133,19 @@ Build it with:
 .\gradlew.bat :app:assembleRelease
 ```
 
-The release variant is minified with R8, has `DEV_BUILD=false`, and defaults screenshot protection to **on**.
+The release variant has `DEV_BUILD=false` and defaults screenshot protection to **on**.
 
-The **1.3.1 hotfix, 1.4.0, 1.4.1, and 1.5.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
+The **1.3.1 hotfix, 1.4.0, 1.4.1, 1.5.0, and 1.6.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
+
+### One-command release
+
+`scripts/release.ps1` bumps `versionCode`/`versionName` when needed, runs the unit tests, builds the signed APK, computes its SHA-256, commits, tags, pushes, and publishes the GitHub release:
+
+```powershell
+.\scripts\release.ps1 -Version 1.6.0 -NotesFile "$env:TEMP\locker-notes-1.6.0.md"
+```
+
+Add `-DryRun` to stop after the build and hash, or `-SkipTests` when the tests already ran. The working tree must be clean before the script starts.
 
 `BuildConfig.DEV_BUILD` is true only for debug builds. The screenshot-protection preference defaults to **on** in both debug and release; turn it off from Security when you need to capture screenshots during development.
 
@@ -149,21 +164,19 @@ app/src/main/java/app/locker/vault/
 
 ## Verified on device
 
-The signed release build (version 1.4.1; R8 disabled for this build because the host repeatedly hit native memory limits under concurrent builds) was installed **fresh** on an Android 17 Samsung phone (SM-S942B) and exercised end-to-end with a temporary vault:
+The signed release build (version 1.6.0; R8 disabled because the build host hit native memory limits under concurrent builds) was installed with `adb install -r` on an Android 17 Samsung phone (SM-S942B) and exercised end-to-end with a temporary vault:
 
-- fresh install → create vault → the numeric recovery key displayed as five 5-digit groups; Group 2 and Group 4 were verified and onboarding completed. (1.4.0 asked for a nonexistent “Group 10”, which blocked fresh setups; 1.4.1 fixes it.)
-- real-vault password unlock works after the multi-space refactor
-- the duress password opened the independent **decoy vault** (harmless example entries); locking again and entering the real password returned to the real vault with its items intact, and no crash occurred
-- **Notes disguise**: the working notepad rendered while the vault was locked; long-pressing the title and entering the passcode revealed the real lock screen
-- **Calendar disguise**: the month view rendered and the same passcode gate worked; the launcher alias resolved correctly and switching back to Locker restored `MainActivity`
-- **voice memo** recorded with pause/resume and saved successfully (this path crashed in 1.3.0)
-- **document scanner** captured two pages, the page menu moved/removed pages, and an encrypted PDF saved successfully (this path crashed in 1.3.0)
-- **video** recorded as a first-class `VIDEO` item; trim-in-place updated it and automatically kept a separate “(original)” copy in the vault
-- **smart folder** created, pinned to Home, and its `type:video` query filtered the list to the two videos
-- the new **shield + keypad launcher icon** was confirmed in App Info, and the launcher entries/permissions were correct
-- the temporary vault and decoy were erased afterwards and the app was left at the onboarding screen
+- fresh install → create vault → numeric recovery key shown in five 5-digit groups → Group 2 and Group 4 verified → onboarding completed; data survived a `-r` reinstall
+- **Bank template** filled the title, notes, and structured bank/account fields
+- editing a note created a **Previous versions** snapshot; restoring it returned the earlier text and kept the newer version in the list
+- **per-item biometric gate** hid a protected secret behind a lock card; the Android prompt appeared, and cancelling returned to the locked card with the content still hidden
+- **Bitwarden JSON** imported 2 logins and skipped the 1 non-login item; folder, TOTP, notes, and favourite state mapped correctly
+- **Google Authenticator migration QR** imported the account and produced a live refreshing 6-digit code
+- **photo redaction** saved a new item; the exported copy had a solid black box over the redacted line and the rest of the image unchanged, and the new item kept its PNG type
+- **Diagnostics** showed the build/device details and exported a text file with no crash reports
+- the temporary vault was erased afterwards; the app was left at onboarding
 
-Unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), CSV import edge cases, password-generator guarantees, the calculator engine, and the predictable-password detector, plus the existing crypto suites.
+Unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), CSV/Bitwarden/ZIP import parsing, Google Authenticator migration QR parsing, item-history retention, password-generator guarantees, the calculator engine, and the predictable-password detector.
 
 Version 1.3.x had previously been exercised on the same device for the calculator disguise, in-app video recording, voice memos, document scanning, password import, smart folders, and the icon set. Version 1.2.0 was exercised for the numeric recovery code, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 

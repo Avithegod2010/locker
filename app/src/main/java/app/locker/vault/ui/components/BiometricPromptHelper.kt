@@ -18,6 +18,52 @@ fun Context.findFragmentActivity(): FragmentActivity? {
 }
 
 object BiometricPromptHelper {
+    /** A plain confirmation prompt with no cryptographic material attached. */
+    fun confirm(
+        activity: FragmentActivity,
+        title: String,
+        subtitle: String,
+        onSuccess: () -> Unit,
+        onCancelled: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
+        val executor = ContextCompat.getMainExecutor(activity)
+        val prompt = BiometricPrompt(
+            activity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    if (errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
+                        errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                        errorCode == BiometricPrompt.ERROR_CANCELED
+                    ) {
+                        onCancelled()
+                    } else {
+                        onFailure(errString.toString())
+                    }
+                }
+
+                override fun onAuthenticationFailed() {
+                    // The prompt stays open; the user can try again.
+                }
+            }
+        )
+
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setConfirmationRequired(false)
+            .setNegativeButtonText("Cancel")
+            .build()
+
+        prompt.authenticate(info)
+    }
+
     fun authenticate(
         activity: FragmentActivity,
         cipher: Cipher,

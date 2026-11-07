@@ -62,6 +62,16 @@ class BiometricAuthActivity : FragmentActivity() {
                     onFailure = { finishWith(false, it) }
                 )
             }
+            MODE_CONFIRM -> {
+                BiometricPromptHelper.confirm(
+                    activity = this,
+                    title = "Confirm it's you",
+                    subtitle = "This item is protected by biometrics",
+                    onSuccess = { finishWith(true, null) },
+                    onCancelled = { finishWith(false, "Cancelled") },
+                    onFailure = { finishWith(false, it) }
+                )
+            }
             else -> finishWith(false, "Unknown biometric request")
         }
     }
@@ -82,5 +92,6 @@ class BiometricAuthActivity : FragmentActivity() {
         const val EXTRA_MESSAGE = "message"
         const val MODE_ENROLL = "enroll"
         const val MODE_UNLOCK = "unlock"
+        const val MODE_CONFIRM = "confirm"
     }
 }

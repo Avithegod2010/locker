@@ -18,6 +18,7 @@ object Routes {
     const val BACKUP = "backup"
     const val PASSWORD_HEALTH = "password-health"
     const val IMPORT_PASSWORDS = "import-passwords"
+    const val DIAGNOSTICS = "diagnostics"
     const val CAMERA = "camera"
     const val RECORDER = "recorder"
     const val SCANNER = "scanner"
@@ -31,6 +32,7 @@ object Routes {
     const val VIDEO = "video/{id}"
     const val PDF = "pdf/{id}"
     const val EDIT_IMAGE = "edit-image/{id}"
+    const val REDACT = "redact/{id}"
     const val NEW = "new/{type}"
 
     fun item(id: String): String = "item/$id"
@@ -39,5 +41,6 @@ object Routes {
     fun video(id: String): String = "video/$id"
     fun pdf(id: String): String = "pdf/$id"
     fun editImage(id: String): String = "edit-image/$id"
+    fun redact(id: String): String = "redact/$id"
     fun new(type: VaultType): String = "new/${type.name}"
 }

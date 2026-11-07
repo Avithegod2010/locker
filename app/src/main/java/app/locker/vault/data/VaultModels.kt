@@ -26,6 +26,19 @@ data class PasswordHistoryEntry(
     val changedAt: Long
 )
 
+/** A previous version of a secret or note, kept encrypted with the item. Newest first. */
+data class ItemHistoryEntry(
+    val title: String,
+    val body: String,
+    val username: String,
+    val password: String,
+    val location: String,
+    val website: String,
+    val otpSecret: String,
+    val fields: List<CustomField>,
+    val changedAt: Long
+)
+
 data class VaultItem(
     val id: String,
     val type: VaultType,
@@ -54,7 +67,11 @@ data class VaultItem(
     val deletedAt: Long? = null,
     /** Epoch millis for the expiry date, or 0 when the item does not expire. */
     val expiresAt: Long = 0L,
-    val passwordHistory: List<PasswordHistoryEntry> = emptyList()
+    val passwordHistory: List<PasswordHistoryEntry> = emptyList(),
+    /** Previous title/notes/login versions, newest first. */
+    val history: List<ItemHistoryEntry> = emptyList(),
+    /** Require a fresh biometric confirmation before revealing this item's contents. */
+    val requireBiometric: Boolean = false
 ) {
     val isImage: Boolean
         get() = mimeType.startsWith("image/") || (type == VaultType.PHOTO && mimeType.isBlank())

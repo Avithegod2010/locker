@@ -64,8 +64,16 @@ class EncryptedFileStore(context: Context, dirName: String = "vault") {
                 }
             }
         }
-        val mime = resolver.getType(uri) ?: guessMime(name.orEmpty())
-        val displayName = name?.takeIf { it.isNotBlank() } ?: "File_${System.currentTimeMillis()}"
+        val displayName = name?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.takeIf { it.isNotBlank() }
+            ?: "File_${System.currentTimeMillis()}"
+        val guessed = guessMime(displayName)
+        val resolved = resolver.getType(uri)
+        val mime = when {
+            resolved.isNullOrBlank() -> guessed
+            resolved == "application/octet-stream" && guessed != "application/octet-stream" -> guessed
+            else -> resolved
+        }
         return PickedFileInfo(displayName, mime, size)
     }
 

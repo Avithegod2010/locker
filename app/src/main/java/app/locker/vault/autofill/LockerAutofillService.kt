@@ -48,7 +48,10 @@ class LockerAutofillService : AutofillService() {
         } else null
         val domain = root?.webDomain.orEmpty()
         val all = container.repository.items.value.filter {
-            it.type == VaultType.SECRET && it.deletedAt == null && it.archivedAt == null
+            it.type == VaultType.SECRET &&
+                it.deletedAt == null &&
+                it.archivedAt == null &&
+                !it.requireBiometric
         }
         val matching = all.filter { item ->
             matches(item, packageName, domain)
@@ -112,14 +115,27 @@ class LockerAutofillService : AutofillService() {
         val packageName = structure.activityComponent?.packageName.orEmpty()
         val title = domain.ifBlank { packageName }.ifBlank { "Autofilled login" }
         container.appScope.launch {
-            container.repository.createTextItem(
-                type = VaultType.SECRET,
-                title = title,
-                username = username,
-                password = password,
-                website = domain.ifBlank { packageName },
-                collectionIds = emptyList()
-            )
+            val existing = container.repository.items.value.firstOrNull { item ->
+                item.type == VaultType.SECRET &&
+                    item.deletedAt == null &&
+                    !item.requireBiometric &&
+                    item.username.equals(username, ignoreCase = true) &&
+                    matches(item, packageName, domain)
+            }
+            if (existing != null) {
+                container.repository.updateItem(
+                    existing.copy(password = password, updatedAt = System.currentTimeMillis())
+                )
+            } else {
+                container.repository.createTextItem(
+                    type = VaultType.SECRET,
+                    title = title,
+                    username = username,
+                    password = password,
+                    website = domain.ifBlank { packageName },
+                    collectionIds = emptyList()
+                )
+            }
         }
         callback.onSuccess()
     }
@@ -140,13 +156,18 @@ class LockerAutofillService : AutofillService() {
         fun walk(node: android.app.assist.AssistStructure.ViewNode) {
             val hints = node.autofillHints?.map { it.lowercase(Locale.US) }.orEmpty()
             val inputType = node.inputType
+            val hintText = node.hint?.lowercase(Locale.US).orEmpty()
+            val idText = node.idEntry?.lowercase(Locale.US).orEmpty()
             val passwordLike = hints.any { it.contains("password") } ||
+                hintText.contains("password") || hintText.contains("passcode") ||
+                idText.contains("password") || idText.contains("passwd") ||
                 (inputType and InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0 ||
                 (inputType and InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) != 0
             val usernameLike = hints.any {
                 it.contains("username") || it.contains("email") || it == View.AUTOFILL_HINT_EMAIL_ADDRESS
-            } || node.idEntry?.contains("user", ignoreCase = true) == true ||
-                node.idEntry?.contains("email", ignoreCase = true) == true
+            } || idText.contains("user") || idText.contains("email") ||
+                idText.contains("login") || hintText.contains("user") ||
+                hintText.contains("email") || hintText.contains("login")
             if (node.autofillId != null) {
                 if (passwordLike && passwordId == null) {
                     passwordId = node.autofillId
@@ -171,16 +192,29 @@ class LockerAutofillService : AutofillService() {
     }
 
     private fun matches(item: VaultItem, packageName: String, domain: String): Boolean {
-        val website = item.website.trim().lowercase(Locale.US)
+        val website = normalizeHost(item.website)
+        if (website.isBlank()) return false
+        val packageLower = packageName.lowercase(Locale.US)
+        val domainLower = normalizeHost(domain)
+        if (website == packageLower) return true
+        if (domainLower.isNotBlank()) {
+            if (website == domainLower) return true
+            if (website.endsWith(".$domainLower")) return true
+            // A login saved for a subdomain should still match its parent site.
+            if (domainLower.endsWith(".$website")) return true
+        }
+        // App package names often end with the service name (com.example.spotify).
+        val packageTail = packageLower.substringAfterLast('.')
+        return packageTail.length >= 4 && website == packageTail
+    }
+
+    private fun normalizeHost(raw: String): String =
+        raw.trim().lowercase(Locale.US)
             .removePrefix("https://")
             .removePrefix("http://")
             .removePrefix("www.")
             .substringBefore('/')
-        if (website.isBlank()) return false
-        val packageLower = packageName.lowercase(Locale.US)
-        val domainLower = domain.lowercase(Locale.US).removePrefix("www.")
-        return website == packageLower ||
-            website == domainLower ||
-            (domainLower.isNotBlank() && website.endsWith(".$domainLower"))
-    }
+            .substringBefore('?')
+            .substringBefore('#')
+            .substringBefore(':')
 }

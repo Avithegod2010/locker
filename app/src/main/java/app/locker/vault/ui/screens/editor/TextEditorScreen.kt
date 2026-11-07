@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Tune
@@ -63,6 +64,8 @@ import app.locker.vault.core.Formatting
 import app.locker.vault.core.PasswordGenerator
 import app.locker.vault.core.Totp
 import app.locker.vault.data.CustomField
+import app.locker.vault.data.ItemTemplate
+import app.locker.vault.data.ItemTemplates
 import app.locker.vault.data.VaultItem
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
@@ -143,6 +146,10 @@ fun TextEditorScreen(
     var expiresAt by remember(itemId, effectiveType) {
         mutableLongStateOf(existing?.expiresAt ?: 0L)
     }
+    var requireBiometric by remember(itemId, effectiveType) {
+        mutableStateOf(existing?.requireBiometric ?: false)
+    }
+    val biometricAvailable = remember { app.biometricKeyStore.canAuthenticate() }
     var revealPassword by rememberSaveable(itemId, effectiveType) { mutableStateOf(false) }
     var showGeneratorOptions by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -174,7 +181,8 @@ fun TextEditorScreen(
                     fields = customFields,
                     collectionIds = selectedCollections.toList(),
                     favorite = favorite,
-                    expiresAt = expiresAt
+                    expiresAt = expiresAt,
+                    requireBiometric = requireBiometric
                 )
             } else {
                 app.repository.updateItem(
@@ -190,7 +198,8 @@ fun TextEditorScreen(
                         fields = customFields,
                         favorite = favorite,
                         collectionIds = selectedCollections.toList(),
-                        expiresAt = expiresAt
+                        expiresAt = expiresAt,
+                        requireBiometric = requireBiometric
                     )
                 )
             }
@@ -216,6 +225,24 @@ fun TextEditorScreen(
         onSave = { save() }
     ) {
         Spacer(Modifier.height(14.dp))
+
+        if (existing == null &&
+            (effectiveType == VaultType.SECRET || effectiveType == VaultType.NOTE)
+        ) {
+            ItemTemplateRow(
+                type = effectiveType,
+                onPick = { template ->
+                    if (template.title.isNotBlank()) title = template.title
+                    if (template.body.isNotBlank()) body = template.body
+                    if (template.username.isNotBlank()) username = template.username
+                    if (template.password.isNotBlank()) password = template.password
+                    if (template.website.isNotBlank()) website = template.website
+                    if (template.location.isNotBlank()) location = template.location
+                    if (template.fields.isNotEmpty()) customFields = template.fields
+                }
+            )
+            Spacer(Modifier.height(22.dp))
+        }
 
         if (effectiveType == VaultType.FILE || effectiveType == VaultType.PHOTO || effectiveType == VaultType.VIDEO) {
             if (existing != null) {
@@ -497,6 +524,13 @@ fun TextEditorScreen(
             onCheckedChange = { favorite = it }
         )
 
+        Spacer(Modifier.height(16.dp))
+        BiometricGateToggle(
+            checked = requireBiometric,
+            available = biometricAvailable,
+            onCheckedChange = { requireBiometric = it }
+        )
+
         if (error != null) {
             Spacer(Modifier.height(14.dp))
             Text(
@@ -741,6 +775,83 @@ private val thingTemplates = listOf(
         listOf(CustomField("Serves", ""), CustomField("Ingredients", ""))
     )
 )
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun ItemTemplateRow(type: VaultType, onPick: (ItemTemplate) -> Unit) {
+    val templates = ItemTemplates.forType(type)
+    if (templates.isEmpty()) return
+    Column {
+        Text(
+            if (type == VaultType.NOTE) "NOTE TEMPLATE" else "QUICK TEMPLATE",
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            templates.forEach { template ->
+                FilterPill(
+                    label = template.name,
+                    selected = false,
+                    onClick = { onPick(template) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BiometricGateToggle(
+    checked: Boolean,
+    available: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.Fingerprint,
+                contentDescription = null,
+                tint = if (available) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Require biometrics",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    if (available) {
+                        "Ask for a fingerprint before showing or copying this item's contents."
+                    } else {
+                        "No strong biometric is enrolled on this device yet."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = available
+            )
+        }
+    }
+}
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)

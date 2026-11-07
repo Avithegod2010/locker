@@ -81,7 +81,8 @@ class VaultRepository(
         collectionIds: List<String> = emptyList(),
         favorite: Boolean = false,
         parentId: String = "",
-        expiresAt: Long = 0L
+        expiresAt: Long = 0L,
+        requireBiometric: Boolean = false
     ): Result<VaultItem> = runCatching {
         withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
@@ -104,7 +105,8 @@ class VaultRepository(
                     parentId = parentId,
                     createdAt = now,
                     updatedAt = now,
-                    expiresAt = expiresAt.coerceAtLeast(0L)
+                    expiresAt = expiresAt.coerceAtLeast(0L),
+                    requireBiometric = requireBiometric
                 )
                 writeMutex.withLock {
                     upsertItemLocked(key, item)
@@ -205,9 +207,18 @@ class VaultRepository(
                     } else {
                         normalized
                     }
-                    upsertItemLocked(key, withHistory)
+                    val withVersions = if (
+                        previous != null && ItemHistory.contentChanged(previous, withHistory)
+                    ) {
+                        withHistory.copy(
+                            history = ItemHistory.append(withHistory.history, previous, now)
+                        )
+                    } else {
+                        withHistory
+                    }
+                    upsertItemLocked(key, withVersions)
                     reload(key)
-                    withHistory
+                    withVersions
                 }
                 updated
             } finally {
@@ -1042,6 +1053,37 @@ class VaultRepository(
                     }
                 }
             }
+            val itemHistory = mutableListOf<ItemHistoryEntry>()
+            json.optJSONArray("history")?.let { array ->
+                for (i in 0 until array.length()) {
+                    val entry = array.optJSONObject(i) ?: continue
+                    val fields = mutableListOf<CustomField>()
+                    entry.optJSONArray("fields")?.let { fieldArray ->
+                        for (fieldIndex in 0 until fieldArray.length()) {
+                            val field = fieldArray.optJSONObject(fieldIndex) ?: continue
+                            val label = field.optString("label")
+                            if (label.isNotBlank()) {
+                                fields += CustomField(
+                                    label = label,
+                                    value = field.optString("value"),
+                                    sensitive = field.optBoolean("sensitive", false)
+                                )
+                            }
+                        }
+                    }
+                    itemHistory += ItemHistoryEntry(
+                        title = entry.optString("title"),
+                        body = entry.optString("body"),
+                        username = entry.optString("username"),
+                        password = entry.optString("password"),
+                        location = entry.optString("location"),
+                        website = entry.optString("website"),
+                        otpSecret = entry.optString("otpSecret"),
+                        fields = fields,
+                        changedAt = entry.optLong("changedAt", 0L)
+                    )
+                }
+            }
             VaultItem(
                 id = row.id,
                 type = VaultType.valueOf(row.type),
@@ -1069,7 +1111,9 @@ class VaultRepository(
                 archivedAt = json.optLong("archivedAt", 0L).takeIf { it > 0L },
                 deletedAt = row.deletedAt,
                 expiresAt = json.optLong("expiresAt", 0L).coerceAtLeast(0L),
-                passwordHistory = passwordHistory
+                passwordHistory = passwordHistory,
+                history = itemHistory,
+                requireBiometric = json.optBoolean("requireBiometric", false)
             )
         } catch (_: Exception) {
             null
@@ -1130,8 +1174,40 @@ class VaultRepository(
             .put("favorite", item.favorite)
             .put("archivedAt", item.archivedAt ?: 0L)
             .put("expiresAt", item.expiresAt)
+            .put("requireBiometric", item.requireBiometric)
             .put("tags", JSONArray(item.tags))
             .put("parentId", item.parentId)
+            .put(
+                "history",
+                JSONArray().apply {
+                    item.history.forEach { entry ->
+                        put(
+                            JSONObject()
+                                .put("title", entry.title)
+                                .put("body", entry.body)
+                                .put("username", entry.username)
+                                .put("password", entry.password)
+                                .put("location", entry.location)
+                                .put("website", entry.website)
+                                .put("otpSecret", entry.otpSecret)
+                                .put("changedAt", entry.changedAt)
+                                .put(
+                                    "fields",
+                                    JSONArray().apply {
+                                        entry.fields.forEach { field ->
+                                            put(
+                                                JSONObject()
+                                                    .put("label", field.label)
+                                                    .put("value", field.value)
+                                                    .put("sensitive", field.sensitive)
+                                            )
+                                        }
+                                    }
+                                )
+                        )
+                    }
+                }
+            )
             .put(
                 "passwordHistory",
                 JSONArray().apply {

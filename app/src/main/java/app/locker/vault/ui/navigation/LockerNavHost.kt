@@ -23,6 +23,7 @@ import app.locker.vault.ui.screens.editor.ImportScreen
 import app.locker.vault.ui.screens.scanner.DocumentScannerScreen
 import app.locker.vault.ui.screens.recorder.VoiceRecorderScreen
 import app.locker.vault.ui.screens.editor.ImageEditorScreen
+import app.locker.vault.ui.screens.editor.RedactPhotoScreen
 import app.locker.vault.ui.screens.editor.TextEditorScreen
 import app.locker.vault.ui.screens.home.HomeScreen
 import app.locker.vault.ui.screens.legacy.LegacyScreen
@@ -30,6 +31,7 @@ import app.locker.vault.ui.screens.settings.AboutScreen
 import app.locker.vault.ui.screens.settings.AccountScreen
 import app.locker.vault.ui.screens.settings.AppearanceSettingsScreen
 import app.locker.vault.ui.screens.settings.BackupScreen
+import app.locker.vault.ui.screens.settings.DiagnosticsScreen
 import app.locker.vault.ui.screens.settings.GeneralSettingsScreen
 import app.locker.vault.ui.screens.settings.ImportPasswordsScreen
 import app.locker.vault.ui.screens.settings.PasswordHealthScreen
@@ -124,7 +126,13 @@ fun LockerNavHost() {
             GeneralSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.ABOUT) {
-            AboutScreen(onBack = { navController.popBackStack() })
+            AboutScreen(
+                onBack = { navController.popBackStack() },
+                onDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) }
+            )
+        }
+        composable(Routes.DIAGNOSTICS) {
+            DiagnosticsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.IMPORT_PHOTO) {
             ImportScreen(
@@ -186,6 +194,7 @@ fun LockerNavHost() {
                 onViewVideo = { navController.navigate(Routes.video(it.id)) },
                 onViewPdf = { navController.navigate(Routes.pdf(it.id)) },
                 onEditImage = { navController.navigate(Routes.editImage(it.id)) },
+                onRedactPhoto = { navController.navigate(Routes.redact(it.id)) },
                 onOpenAttachment = { navController.navigate(Routes.item(it.id)) }
             )
         }
@@ -212,6 +221,15 @@ fun LockerNavHost() {
             arguments = listOf(navArgument("id") { type = NavType.StringType })
         ) { entry ->
             ImageEditorScreen(
+                itemId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Routes.REDACT,
+            arguments = listOf(navArgument("id") { type = NavType.StringType })
+        ) { entry ->
+            RedactPhotoScreen(
                 itemId = entry.arguments?.getString("id").orEmpty(),
                 onBack = { navController.popBackStack() }
             )

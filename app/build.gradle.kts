@@ -32,8 +32,8 @@ android {
         applicationId = "app.locker.vault"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.5.0"
+        versionCode = 9
+        versionName = "1.6.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -123,8 +123,10 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("org.bouncycastle:bcprov-jdk18on:1.86")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

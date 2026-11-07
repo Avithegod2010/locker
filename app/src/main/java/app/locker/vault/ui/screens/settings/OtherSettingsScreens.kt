@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
@@ -707,7 +708,10 @@ private fun EditProfileDialog(profile: VaultProfile, onDismiss: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    onDiagnostics: () -> Unit = {}
+) {
     SettingsScaffold(title = "About", onBack = onBack) {
         Spacer(Modifier.height(22.dp))
         Column(
@@ -773,6 +777,17 @@ fun AboutScreen(onBack: () -> Unit) {
             AboutSecurityRow("Encrypted profile", "Even your display name is encrypted inside the vault.")
             RowDivider()
             AboutSecurityRow("No network permission", "The APK cannot create an internet connection.")
+        }
+
+        SettingsSectionTitle("Support")
+        SettingsGroup {
+            SettingRow(
+                icon = Icons.Rounded.BugReport,
+                tint = BrandBlue,
+                title = "Diagnostics",
+                subtitle = "Build details and the app-private crash log.",
+                onClick = onDiagnostics
+            )
         }
 
         SettingsSectionTitle("Built with")

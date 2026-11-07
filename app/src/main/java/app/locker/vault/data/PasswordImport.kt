@@ -34,19 +34,120 @@ object PasswordImport {
 
     class Unrecognized(val reason: String) : Exception(reason)
 
-    /** Parses CSV, KeePass XML, or a 1Password .1pux (ZIP) export. */
+    /** Parses CSV, Bitwarden JSON, KeePass XML, 1Password .1pux, or a ZIP with a CSV inside. */
     fun parseBytes(bytes: ByteArray): Parsed {
         if (bytes.size >= 4 &&
             bytes[0] == 0x50.toByte() &&
             bytes[1] == 0x4B.toByte()
         ) {
-            return parse1Pux(bytes)
+            return parseZip(bytes)
         }
         val text = bytes.toString(Charsets.UTF_8).trimStart('\uFEFF').trimStart()
+        if (text.startsWith("{") && text.contains("\"items\"")) {
+            return parseBitwardenJson(text)
+        }
         if (text.startsWith("<") && text.contains("KeePassFile", ignoreCase = true)) {
             return parseKeePassXml(text)
         }
         return parse(text)
+    }
+
+    /**
+     * A ZIP can be a 1Password .1pux export or a CSV-based export such as Dashlane's
+     * credentials.zip. Only the first recognised member is read; nothing is extracted to disk.
+     */
+    private fun parseZip(bytes: ByteArray): Parsed {
+        var csvName: String? = null
+        var csvText: String? = null
+        ZipInputStream(bytes.inputStream()).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val name = entry.name
+                if (name == "export.data" || name.endsWith(".data")) {
+                    val text = zip.readBytes().toString(Charsets.UTF_8)
+                    if (text.trimStart().startsWith("{")) {
+                        return parse1PuxText(text)
+                    }
+                }
+                if (csvText == null && name.endsWith(".csv", ignoreCase = true)) {
+                    csvText = zip.readBytes().toString(Charsets.UTF_8)
+                    csvName = name
+                }
+                entry = zip.nextEntry
+            }
+        }
+        val text = csvText ?: throw Unrecognized(
+            "This ZIP archive did not contain a 1Password export or a CSV file."
+        )
+        val parsed = parse(text)
+        val provider = if (
+            csvName?.contains("dashlane", ignoreCase = true) == true ||
+            text.take(2048).contains("dashlane", ignoreCase = true)
+        ) {
+            "Dashlane (ZIP)"
+        } else {
+            "ZIP archive (CSV)"
+        }
+        return parsed.copy(provider = provider)
+    }
+
+    private fun parseBitwardenJson(text: String): Parsed {
+        val root = runCatching { JSONObject(text) }.getOrElse {
+            throw Unrecognized("The Bitwarden JSON export could not be read.")
+        }
+        if (root.optBoolean("encrypted", false)) {
+            throw Unrecognized(
+                "This Bitwarden JSON is encrypted. Export an unencrypted .json file and try again."
+            )
+        }
+        val folders = mutableMapOf<String, String>()
+        root.optJSONArray("folders")?.let { array ->
+            for (i in 0 until array.length()) {
+                val folder = array.optJSONObject(i) ?: continue
+                folders[folder.optString("id")] = folder.optString("name")
+            }
+        }
+        val items = root.optJSONArray("items")
+            ?: throw Unrecognized("The Bitwarden export did not contain an items list.")
+        val rows = mutableListOf<Row>()
+        var skipped = 0
+        for (index in 0 until items.length()) {
+            val item = items.optJSONObject(index) ?: continue
+            if (item.optInt("type", 0) != 1) {
+                skipped++
+                continue
+            }
+            val login = item.optJSONObject("login")
+            if (login == null) {
+                skipped++
+                continue
+            }
+            val website = login.optJSONArray("uris")
+                ?.optJSONObject(0)
+                ?.optString("uri")
+                .orEmpty()
+            val title = item.optString("name")
+            val username = login.optString("username")
+            val password = login.optString("password")
+            if (title.isBlank() && username.isBlank() && password.isBlank() && website.isBlank()) {
+                skipped++
+                continue
+            }
+            rows += Row(
+                title = title,
+                username = username,
+                password = password,
+                website = website,
+                notes = item.optString("notes"),
+                totp = login.optString("totp"),
+                folder = folders[item.optString("folderId")].orEmpty(),
+                favorite = item.optBoolean("favorite", false)
+            )
+        }
+        if (rows.isEmpty()) {
+            throw Unrecognized("The Bitwarden export did not contain any logins.")
+        }
+        return Parsed(provider = "Bitwarden (JSON)", rows = rows, skipped = skipped)
     }
 
     private fun parseKeePassXml(text: String): Parsed {
@@ -119,22 +220,7 @@ object PasswordImport {
         return Parsed(provider = "KeePass (XML)", rows = rows, skipped = skipped)
     }
 
-    private fun parse1Pux(bytes: ByteArray): Parsed {
-        val text = runCatching {
-            ZipInputStream(bytes.inputStream()).use { zip ->
-                var entry = zip.nextEntry
-                while (entry != null) {
-                    if (entry.name == "export.data" || entry.name.endsWith(".data")) {
-                        return@use zip.readBytes().toString(Charsets.UTF_8)
-                    }
-                    entry = zip.nextEntry
-                }
-                null
-            }
-        }.getOrNull() ?: throw Unrecognized(
-            "This ZIP archive is not a 1Password .1pux export."
-        )
-
+    private fun parse1PuxText(text: String): Parsed {
         val root = runCatching { JSONObject(text) }.getOrElse {
             throw Unrecognized("The 1Password export data could not be read.")
         }

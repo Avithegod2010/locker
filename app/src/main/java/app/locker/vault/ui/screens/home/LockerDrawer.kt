@@ -203,7 +203,7 @@ fun DrawerContent(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Locker 1.5.0 · No network permission",
+            "Locker 1.6.0 · No network permission",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
             modifier = Modifier

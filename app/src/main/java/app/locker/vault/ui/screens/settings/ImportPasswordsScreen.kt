@@ -1,5 +1,6 @@
 package app.locker.vault.ui.screens.settings
 
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,10 +41,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.data.PasswordImport
+import app.locker.vault.data.TotpImport
 import app.locker.vault.data.VaultItem
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.SecureWindow
+import app.locker.vault.ui.components.decodeQrCode
+import app.locker.vault.ui.components.decodeSampledBitmap
 import app.locker.vault.ui.theme.BrandBlue
 import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
@@ -91,6 +95,16 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
         }
     }
 
+    fun applyParsed(data: PasswordImport.Parsed, name: String?) {
+        parsed = data
+        fileName = name
+        val duplicateIndexes = data.rows.indices
+            .filter { index -> duplicateOf(data.rows[index]) }
+            .toSet()
+        duplicates = duplicateIndexes
+        selected = data.rows.indices.filterNot { it in duplicateIndexes }.toSet()
+    }
+
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -108,19 +122,50 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
             }
             parsing = false
             result.onSuccess { (data, name) ->
-                parsed = data
-                fileName = name
-                val duplicateIndexes = data.rows.indices
-                    .filter { index -> duplicateOf(data.rows[index]) }
-                    .toSet()
-                duplicates = duplicateIndexes
-                selected = data.rows.indices.filterNot { it in duplicateIndexes }.toSet()
+                applyParsed(data, name)
             }.onFailure {
                 errorText = when (it) {
                     is PasswordImport.Unrecognized -> it.message
-                    else -> "The file could not be read. Export an unencrypted CSV, KeePass XML, or 1PUX file."
+                    else -> "The file could not be read. Export an unencrypted CSV, JSON, KeePass XML, or 1PUX file."
                 }
             }
+        }
+    }
+
+    val qrPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        reset()
+        parsing = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use {
+                        it.readBytes()
+                    } ?: ByteArray(0)
+                    val bitmap = decodeSampledBitmap(bytes, 1600, 1600)
+                        ?: throw PasswordImport.Unrecognized("The selected image could not be read.")
+                    val content = decodeQrCode(bitmap)
+                        ?: throw PasswordImport.Unrecognized(
+                            "No QR code was found in that image. Choose a clear screenshot or photo of the setup QR."
+                        )
+                    val data = PasswordImport.Parsed(
+                        provider = "TOTP QR",
+                        rows = TotpImport.parseOrThrow(content),
+                        skipped = 0
+                    )
+                    data to uri.displayName(context)
+                }
+            }
+            parsing = false
+            result.onSuccess { (data, name) -> applyParsed(data, name) }
+                .onFailure {
+                    errorText = when (it) {
+                        is PasswordImport.Unrecognized -> it.message
+                        else -> "The QR image could not be read."
+                    }
+                }
         }
     }
 
@@ -171,7 +216,7 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
             icon = Icons.Rounded.Security,
             tint = BrandBlue,
             title = "Fully offline import",
-            text = "Pick a CSV export, a KeePass XML file, or a 1Password .1pux archive. The file is read on this device only; nothing is uploaded. Columns are mapped automatically, and you can untick anything before it is encrypted into the vault."
+            text = "Pick a CSV, Bitwarden JSON, KeePass XML, 1Password .1pux, or a Dashlane ZIP. You can also import TOTP accounts from a QR screenshot. Everything is parsed on this device; nothing is uploaded, and you can untick anything before it is encrypted into the vault."
         )
         Spacer(Modifier.height(8.dp))
 
@@ -187,6 +232,8 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
                         arrayOf(
                             "text/csv",
                             "text/comma-separated-values",
+                            "application/json",
+                            "text/json",
                             "text/xml",
                             "application/xml",
                             "application/zip",
@@ -194,6 +241,16 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
                             "text/plain"
                         )
                     )
+                }
+            )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.Key,
+                tint = BrandBlue,
+                title = "Import TOTP QR",
+                value = "Choose a QR screenshot or photo",
+                onClick = {
+                    qrPicker.launch(arrayOf("image/*"))
                 }
             )
             RowDivider()
@@ -346,9 +403,13 @@ private fun ImportPreviewRow(
                     }
                 }
             }
-            if (row.username.isNotBlank() || row.website.isNotBlank()) {
+            if (row.username.isNotBlank() || row.website.isNotBlank() || row.totp.isNotBlank()) {
                 Text(
-                    row.username.ifBlank { row.website },
+                    row.username.ifBlank {
+                        row.website.ifBlank {
+                            if (row.totp.isNotBlank()) "TOTP setup key" else ""
+                        }
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

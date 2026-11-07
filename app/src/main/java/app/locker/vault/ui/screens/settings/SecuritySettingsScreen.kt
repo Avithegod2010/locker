@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NoteAdd
@@ -77,7 +78,8 @@ fun SecuritySettingsScreen(
     onBack: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenPasswordHealth: () -> Unit,
-    onOpenImport: () -> Unit
+    onOpenImport: () -> Unit,
+    onOpenRecoveryShares: () -> Unit
 ) {
     val app = LocalAppContainer.current
     val context = LocalContext.current
@@ -133,9 +135,12 @@ fun SecuritySettingsScreen(
     var showDisguise by remember { mutableStateOf(false) }
     var showCalculatorCode by remember { mutableStateOf(false) }
     var showDuress by remember { mutableStateOf(false) }
+    var showHidden by remember { mutableStateOf(false) }
     var calculatorCode by remember { mutableStateOf("") }
     var duressPassword by remember { mutableStateOf("") }
     var duressConfirm by remember { mutableStateOf("") }
+    var hiddenPassword by remember { mutableStateOf("") }
+    var hiddenConfirm by remember { mutableStateOf("") }
 
     val biometricAvailable = remember { app.biometricKeyStore.canAuthenticate() }
     val deviceRooted = remember { DeviceIntegrity.isProbablyRooted() }
@@ -438,6 +443,50 @@ fun SecuritySettingsScreen(
             )
         }
 
+        if (!app.isDecoyActive && !app.isHiddenActive) {
+            SettingsSectionTitle("Hidden vault")
+            InfoBanner(
+                icon = Icons.Rounded.Shield,
+                tint = BrandViolet,
+                title = "A separate encrypted space",
+                text = "Enter the hidden password on the lock screen to open an independent vault with its own keys, database, and files. The real vault stays locked and untouched. Add items while the hidden vault is open; nothing is shared between the two spaces."
+            )
+            Spacer(Modifier.height(10.dp))
+            SettingsGroup {
+                SettingRow(
+                    icon = Icons.Rounded.Key,
+                    tint = BrandViolet,
+                    title = "Hidden vault (travel mode)",
+                    subtitle = "Opens a separate vault with its own password.",
+                    value = if (settings.hiddenVerifier.isNotBlank()) "On" else "Off",
+                    onClick = {
+                        hiddenPassword = ""
+                        hiddenConfirm = ""
+                        showHidden = true
+                    }
+                )
+                if (settings.hiddenVerifier.isNotBlank()) {
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Rounded.Key,
+                        tint = BrandCoral,
+                        title = "Remove hidden vault",
+                        subtitle = "Deletes the hidden space. Your real vault is unaffected.",
+                        onClick = {
+                            scope.launch {
+                                app.clearHiddenPassword()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Hidden vault removed",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
         SettingsSectionTitle("Locking")
         SettingsGroup {
             SettingRow(
@@ -574,6 +623,14 @@ fun SecuritySettingsScreen(
                         }
                     }
                 }
+            )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.Groups,
+                tint = BrandMint,
+                title = "Split recovery key (2-of-3)",
+                subtitle = "Create three paper shares; any two reconstruct the recovery code.",
+                onClick = onOpenRecoveryShares
             )
         }
 
@@ -760,6 +817,80 @@ fun SecuritySettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDuress = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showHidden) {
+        AlertDialog(
+            onDismissRequest = { showHidden = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Set hidden vault password") },
+            text = {
+                Column {
+                    Text(
+                        "Entering this password at the lock screen opens a separate encrypted vault. The real vault stays locked and untouched. The hidden vault has its own items, recovery key, and settings; nothing is shared. Setting the password again rebuilds it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    LockerTextField(
+                        value = hiddenPassword,
+                        onValueChange = { hiddenPassword = it },
+                        placeholder = "At least 10 characters",
+                        label = "Hidden password",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = PasswordVisualTransformation(),
+                        isSensitive = true
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LockerTextField(
+                        value = hiddenConfirm,
+                        onValueChange = { hiddenConfirm = it },
+                        placeholder = "Repeat password",
+                        label = "Confirm",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = PasswordVisualTransformation(),
+                        isSensitive = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when {
+                        hiddenPassword.length < 10 -> android.widget.Toast.makeText(
+                            context,
+                            "Use at least 10 characters",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        hiddenPassword != hiddenConfirm -> android.widget.Toast.makeText(
+                            context,
+                            "Passwords don't match",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        else -> {
+                            showHidden = false
+                            val value = hiddenPassword
+                            hiddenPassword = ""
+                            hiddenConfirm = ""
+                            scope.launch {
+                                val result = app.setHiddenPassword(value.toCharArray())
+                                android.widget.Toast.makeText(
+                                    context,
+                                    result.fold(
+                                        { "Hidden vault ready" },
+                                        { it.message ?: "Could not create the hidden vault" }
+                                    ),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }) { Text("Set password", color = BrandViolet) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHidden = false }) { Text("Cancel") }
             }
         )
     }

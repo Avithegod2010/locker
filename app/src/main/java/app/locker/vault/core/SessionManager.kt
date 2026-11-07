@@ -23,6 +23,7 @@ enum class SessionState {
 sealed interface UnlockResult {
     data object Success : UnlockResult
     data object DuressUnlocked : UnlockResult
+    data object HiddenUnlocked : UnlockResult
     data object WrongCredentials : UnlockResult
     data object InvalidRecoveryKey : UnlockResult
     data class Failure(val message: String) : UnlockResult
@@ -65,6 +66,12 @@ class SessionManager(
     /** Wired by the app container to purge decrypted metadata from memory on lock. */
     var onLocked: (() -> Unit)? = null
 
+    /** Wired by the app container to verify database integrity after a successful unlock. */
+    var onUnlocked: (() -> Unit)? = null
+
+    /** Wired for spaces whose lock-screen password verifier must follow a password change. */
+    var onPasswordChanged: ((saltBase64: String, verifierBase64: String) -> Unit)? = null
+
     /** Wired by the app container to destroy every trace of the real vault on duress. */
     var onDuressWipe: (suspend () -> Unit)? = null
 
@@ -87,6 +94,16 @@ class SessionManager(
     fun hasVault(): Boolean = keyMaterialStore.hasVault()
 
     fun pendingRecoveryCode(): String? = _pendingRecoveryCode.value
+
+    /** Returns the numeric recovery code while unlocked, or null if it cannot be read. */
+    fun recoveryCode(): String? {
+        val key = masterKey?.copyOf() ?: return null
+        return try {
+            keyMaterialStore.recoveryCodeCopy(key)
+        } finally {
+            Crypto.wipe(key)
+        }
+    }
 
     suspend fun createVault(password: CharArray): UnlockResult = withContext(Dispatchers.Default) {
         try {
@@ -358,6 +375,17 @@ class SessionManager(
             try {
                 keyMaterialStore.changePassword(key, newPassword)
                 preferences.setRecoveryUsed(false)
+                onPasswordChanged?.let { callback ->
+                    val salt = Crypto.randomBytes(16)
+                    val digest = Crypto.sha256(
+                        salt + newPassword.concatToString().toByteArray(Charsets.UTF_8)
+                    )
+                    try {
+                        callback(Crypto.b64encode(salt), Crypto.b64encode(digest))
+                    } finally {
+                        Crypto.wipe(digest)
+                    }
+                }
                 UnlockResult.Success
             } catch (t: Throwable) {
                 UnlockResult.Failure(t.message ?: "Could not change password")
@@ -508,6 +536,7 @@ class SessionManager(
         failedAttempts = 0
         preferences.setFailedAttempts(0, failureScope)
         _state.value = SessionState.UNLOCKED
+        onUnlocked?.invoke()
     }
 
     private suspend fun registerFailure(attempt: Int): UnlockResult {

@@ -276,6 +276,17 @@ class VaultDb(
         appContext.deleteDatabase(databaseName)
     }
 
+    /** Flushes WAL pages into the main database so its hash is stable for tamper checks. */
+    fun checkpoint() {
+        runCatching {
+            writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use {
+                it.moveToFirst()
+            }
+        }
+    }
+
+    fun databaseFile(): java.io.File = appContext.getDatabasePath(databaseName)
+
     private val appContext: Context = context.applicationContext
 
     companion object {

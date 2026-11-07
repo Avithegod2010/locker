@@ -23,6 +23,7 @@ import app.locker.vault.core.PlaybackMemory
 import app.locker.vault.core.SecureClipboard
 import app.locker.vault.core.SessionManager
 import app.locker.vault.core.SessionState
+import app.locker.vault.core.TamperGuard
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.data.BackupManager
 import app.locker.vault.data.EncryptedFileStore
@@ -59,6 +60,7 @@ class VaultSpace(
     val keyMaterialStore = KeyMaterialStore(appContext, prefsName)
     val fileStore = EncryptedFileStore(appContext, dirName)
     val database = VaultDb(appContext, dbName)
+    private val tamperGuard = TamperGuard(appContext, dbName)
     val session = SessionManager(
         preferences = preferences,
         keyMaterialStore = keyMaterialStore,
@@ -94,6 +96,15 @@ class VaultSpace(
             repository.clearInMemory()
             ThumbnailCache.clear()
             secureClipboard.clear()
+            scope.launch(Dispatchers.IO) {
+                runCatching { tamperGuard.record(database) }
+            }
+        }
+        session.onUnlocked = {
+            scope.launch(Dispatchers.IO) {
+                val intact = runCatching { tamperGuard.verify(database) }.getOrDefault(true)
+                if (!intact) preferences.setTamperDetected(true)
+            }
         }
     }
 
@@ -143,10 +154,12 @@ class AppContainer(context: Context) {
         "vault"
     )
     private var decoySpace: VaultSpace? = null
+    private var hiddenSpace: VaultSpace? = null
 
     private val _activeSpace = MutableStateFlow(mainSpace)
     val activeSpace: StateFlow<VaultSpace> = _activeSpace.asStateFlow()
     val isDecoyActive: Boolean get() = _activeSpace.value.id == DECOY_ID
+    val isHiddenActive: Boolean get() = _activeSpace.value.id == HIDDEN_ID
 
     // The UI reads these delegates, so every screen follows the active space.
     val session: SessionManager get() = _activeSpace.value.session
@@ -186,6 +199,15 @@ class AppContainer(context: Context) {
                 }
             }
         }
+        if (id == HIDDEN_ID) {
+            space.session.onWipeRequired = {
+                space.wipeData()
+                preferences.clearHiddenCredentials()
+                if (isHiddenActive) {
+                    _activeSpace.value = mainSpace
+                }
+            }
+        }
         return space
     }
 
@@ -197,6 +219,19 @@ class AppContainer(context: Context) {
             "vault_decoy"
         ).also { decoySpace = it }
 
+    private fun ensureHiddenSpace(): VaultSpace =
+        hiddenSpace ?: createSpace(
+            HIDDEN_ID,
+            "locker_key_material_hidden",
+            "vault_hidden.db",
+            "vault_hidden"
+        ).apply {
+            session.onPasswordChanged = { salt, verifier ->
+                preferences.setHiddenCredentials(salt, verifier)
+                preferences.setHiddenFastVerifier(true)
+            }
+        }.also { hiddenSpace = it }
+
     /**
      * Tries the real vault first, then the independent decoy vault. The decoy can also be
      * opened when its in-app password was changed away from the configured duress password.
@@ -205,20 +240,43 @@ class AppContainer(context: Context) {
         withContext(Dispatchers.Default) {
             val main = mainSpace
             val duressConfigured = preferences.settings.value.duressVerifier.isNotBlank()
+            val hiddenConfigured = preferences.settings.value.hiddenVerifier.isNotBlank()
             val decoy = if (duressConfigured || decoySpace != null) ensureDecoySpace() else null
+            val hidden = if (hiddenConfigured || hiddenSpace != null) ensureHiddenSpace() else null
 
-            if (duressConfigured &&
-                main.session.matchesDuressPassword(password.copyOf()) &&
-                decoy != null
-            ) {
-                if (!decoy.keyMaterialStore.hasVault()) {
-                    createDecoyVault(decoy, password.copyOf())
+            if (!isDecoyActive && !isHiddenActive) {
+                if (duressConfigured &&
+                    main.session.matchesDuressPassword(password.copyOf()) &&
+                    decoy != null
+                ) {
+                    if (!decoy.keyMaterialStore.hasVault()) {
+                        createDecoyVault(decoy, password.copyOf())
+                    }
+                    val decoyAttempt = decoy.session.unlockWithPassword(password.copyOf())
+                    if (decoyAttempt is UnlockResult.Success) {
+                        switchTo(decoy)
+                        password.fill('\u0000')
+                        return@withContext UnlockResult.DuressUnlocked
+                    }
                 }
-                val decoyAttempt = decoy.session.unlockWithPassword(password.copyOf())
-                if (decoyAttempt is UnlockResult.Success) {
-                    switchTo(decoy)
+
+                if (hiddenConfigured &&
+                    matchesHiddenPassword(password) &&
+                    hidden != null
+                ) {
+                    if (!hidden.keyMaterialStore.hasVault()) {
+                        createHiddenVault(hidden, password.copyOf())
+                    }
+                    val hiddenAttempt = hidden.session.unlockWithPassword(password.copyOf())
                     password.fill('\u0000')
-                    return@withContext UnlockResult.DuressUnlocked
+                    return@withContext when (hiddenAttempt) {
+                        is UnlockResult.Success -> {
+                            switchTo(hidden)
+                            UnlockResult.HiddenUnlocked
+                        }
+                        is UnlockResult.Failure -> hiddenAttempt
+                        else -> UnlockResult.WrongCredentials
+                    }
                 }
             }
 
@@ -234,6 +292,20 @@ class AppContainer(context: Context) {
                 password.fill('\u0000')
                 return@withContext when (decoyAttempt) {
                     is UnlockResult.Failure -> decoyAttempt
+                    else -> UnlockResult.WrongCredentials
+                }
+            }
+
+            if (isHiddenActive) {
+                if (main.session.tryUnlockQuiet(password.copyOf())) {
+                    switchTo(main)
+                    password.fill('\u0000')
+                    return@withContext UnlockResult.Success
+                }
+                val hiddenAttempt = hidden?.session?.unlockWithPassword(password.copyOf())
+                password.fill('\u0000')
+                return@withContext when (hiddenAttempt) {
+                    is UnlockResult.Failure -> hiddenAttempt
                     else -> UnlockResult.WrongCredentials
                 }
             }
@@ -259,11 +331,44 @@ class AppContainer(context: Context) {
             mainAttempt
         }
 
+    private fun matchesHiddenPassword(password: CharArray): Boolean {
+        val settings = preferences.settings.value
+        if (settings.hiddenVerifier.isBlank() || settings.hiddenSalt.isBlank()) return false
+        val salt = Crypto.b64decode(settings.hiddenSalt) ?: return false
+        val expected = Crypto.b64decode(settings.hiddenVerifier) ?: return false
+        return try {
+            if (settings.hiddenFastVerifier) {
+                val actual = Crypto.sha256(
+                    salt + password.concatToString().toByteArray(Charsets.UTF_8)
+                )
+                try {
+                    actual.contentEquals(expected)
+                } finally {
+                    Crypto.wipe(actual)
+                }
+            } else {
+                val key = Crypto.deriveKey(password, salt, Crypto.currentKdfParams)
+                val actual = try {
+                    Crypto.sha256(key)
+                } finally {
+                    Crypto.wipe(key)
+                }
+                try {
+                    actual.contentEquals(expected)
+                } finally {
+                    Crypto.wipe(actual)
+                }
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            Crypto.wipe(expected)
+        }
+    }
+
     private fun switchTo(space: VaultSpace) {
-        if (space.id == DECOY_ID) {
-            mainSpace.lockIfUnlocked()
-        } else {
-            decoySpace?.lockIfUnlocked()
+        listOfNotNull(mainSpace, decoySpace, hiddenSpace).forEach { candidate ->
+            if (candidate !== space) candidate.lockIfUnlocked()
         }
         _activeSpace.value = space
     }
@@ -274,6 +379,17 @@ class AppContainer(context: Context) {
             val created = space.session.createVault(password)
             if (created !is UnlockResult.Success) error("Could not create the decoy vault")
             seedDecoyVault(space.repository)
+            space.repository.clearInMemory()
+            space.session.forceLocked()
+            true
+        }.getOrDefault(false).also { password.fill('\u0000') }
+
+    /** Creates an empty hidden vault; the user fills it while it is the active space. */
+    private suspend fun createHiddenVault(space: VaultSpace, password: CharArray): Boolean =
+        runCatching {
+            space.wipeContentsForSetup()
+            val created = space.session.createVault(password)
+            if (created !is UnlockResult.Success) error("Could not create the hidden vault")
             space.repository.clearInMemory()
             space.session.forceLocked()
             true
@@ -326,11 +442,64 @@ class AppContainer(context: Context) {
         }
     }
 
+    fun hasHiddenPassword(): Boolean =
+        preferences.settings.value.hiddenVerifier.isNotBlank()
+
+    /** Creates or replaces a separate hidden vault, unlocked by its own password. */
+    suspend fun setHiddenPassword(password: CharArray): Result<Unit> =
+        withContext(Dispatchers.Default) {
+            runCatching {
+                require(!isDecoyActive && !isHiddenActive) { "Switch to the main vault first" }
+                require(mainSpace.session.masterKeyOrNull() != null) { "Unlock the vault first" }
+                if (password.size < 10) {
+                    error("Use at least 10 characters for the hidden password")
+                }
+                val master = mainSpace.session.masterKeyOrNull()
+                    ?: error("Unlock the vault first")
+                val sameAsVault = try {
+                    mainSpace.keyMaterialStore.verifyPassword(password, master)
+                } finally {
+                    Crypto.wipe(master)
+                }
+                if (sameAsVault) {
+                    error("Choose a hidden password that differs from your vault password")
+                }
+                if (mainSpace.session.matchesDuressPassword(password.copyOf())) {
+                    error("Choose a hidden password that differs from the duress password")
+                }
+                val hidden = ensureHiddenSpace()
+                if (!createHiddenVault(hidden, password.copyOf())) {
+                    error("Could not create the hidden vault")
+                }
+                val salt = Crypto.randomBytes(16)
+                val digest = Crypto.sha256(
+                    salt + password.concatToString().toByteArray(Charsets.UTF_8)
+                )
+                preferences.setHiddenCredentials(
+                    Crypto.b64encode(salt),
+                    Crypto.b64encode(digest)
+                )
+                preferences.setHiddenFastVerifier(true)
+                Crypto.wipe(digest)
+            }.also { password.fill('\u0000') }
+        }
+
+    suspend fun clearHiddenPassword(): Result<Unit> = withContext(Dispatchers.Default) {
+        runCatching {
+            require(!isDecoyActive && !isHiddenActive) { "Switch to the main vault first" }
+            hiddenSpace?.wipeData()
+            hiddenSpace = null
+            preferences.clearHiddenCredentials()
+        }
+    }
+
     /** Full wipe: both vaults, biometric key, preferences, and in-memory state. */
     suspend fun wipeVault() {
         mainSpace.wipeData()
         decoySpace?.wipeData()
+        hiddenSpace?.wipeData()
         decoySpace = null
+        hiddenSpace = null
         biometricKeyStore.deleteKey()
         preferences.reset()
         playback.clearAll()
@@ -340,26 +509,87 @@ class AppContainer(context: Context) {
     fun clearSensitiveCaches() {
         runCatching { mainSpace.fileStore.clearSensitiveCaches() }
         runCatching { decoySpace?.fileStore?.clearSensitiveCaches() }
+        runCatching { hiddenSpace?.fileStore?.clearSensitiveCaches() }
     }
 
-    /** Harmless starter content for a freshly created decoy vault. */
+    /** Harmless, lived-in starter content for a freshly created decoy vault. */
     private suspend fun seedDecoyVault(repository: VaultRepository) {
+        val day = 24 * 60 * 60 * 1000L
+        val now = System.currentTimeMillis()
         repository.createTextItem(
             type = VaultType.NOTE,
             title = "Grocery list",
-            body = "Milk\nEggs\nBread\nCoffee beans\nLaundry detergent"
+            body = "Milk\nEggs\nBread\nCoffee beans\nLaundry detergent",
+            createdAt = now - 2 * day,
+            updatedAt = now - 2 * day
         )
         repository.createTextItem(
             type = VaultType.NOTE,
             title = "Warranty receipts",
-            body = "Laptop — bought last spring, 2-year cover\nHeadphones — 1-year cover\nKeep receipts in the desk drawer."
+            body = "Laptop — bought last spring, 2-year cover\nHeadphones — 1-year cover\nKeep receipts in the desk drawer.",
+            createdAt = now - 150 * day,
+            updatedAt = now - 140 * day
         )
         repository.createTextItem(
             type = VaultType.SECRET,
             title = "Home Wi-Fi",
             username = "home",
             password = "sunflower-2021",
-            website = "192.168.1.1"
+            website = "192.168.1.1",
+            createdAt = now - 240 * day,
+            updatedAt = now - 240 * day
+        )
+        repository.createTextItem(
+            type = VaultType.SECRET,
+            title = "Streaming subscription",
+            username = "family@example.com",
+            password = "MovieNight!24",
+            website = "https://stream.example.com",
+            createdAt = now - 95 * day,
+            updatedAt = now - 95 * day
+        )
+        repository.createTextItem(
+            type = VaultType.THING,
+            title = "Gym membership",
+            location = "Wallet",
+            body = "Renews in March. Locker key tag is in the front pocket.",
+            fields = listOf(
+                app.locker.vault.data.CustomField("Member number", "G-20418"),
+                app.locker.vault.data.CustomField("Renews", "March")
+            ),
+            createdAt = now - 180 * day,
+            updatedAt = now - 180 * day
+        )
+        repository.createTextItem(
+            type = VaultType.THING,
+            title = "Passport",
+            location = "Bedroom safe",
+            body = "Keep the physical document in the safe with the travel folder.",
+            fields = listOf(
+                app.locker.vault.data.CustomField("Expires", "2031"),
+                app.locker.vault.data.CustomField("Number", "P-882103")
+            ),
+            createdAt = now - 420 * day,
+            updatedAt = now - 420 * day
+        )
+        repository.createTextItem(
+            type = VaultType.THING,
+            title = "Car insurance",
+            location = "Glove box",
+            body = "Policy and roadside assistance number.",
+            fields = listOf(
+                app.locker.vault.data.CustomField("Policy", "CI-55219"),
+                app.locker.vault.data.CustomField("Roadside", "1800-555-0142")
+            ),
+            createdAt = now - 120 * day,
+            updatedAt = now - 120 * day
+        )
+        repository.createTextItem(
+            type = VaultType.NOTE,
+            title = "Travel plans",
+            body = "Long weekend in September.\nBook the train by August.\nWater the plants before leaving.",
+            createdAt = now - 28 * day,
+            updatedAt = now - 28 * day
         )
     }
 
@@ -370,6 +600,7 @@ class AppContainer(context: Context) {
     private companion object {
         const val MAIN_ID = "main"
         const val DECOY_ID = "decoy"
+        const val HIDDEN_ID = "hidden"
     }
 }
 

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.NoteAdd
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,7 +45,9 @@ import app.locker.vault.data.PasswordImport
 import app.locker.vault.data.TotpImport
 import app.locker.vault.data.VaultItem
 import app.locker.vault.data.VaultType
+import app.locker.vault.core.TransferCodec
 import app.locker.vault.ui.LocalAppContainer
+import app.locker.vault.ui.components.LockerTextField
 import app.locker.vault.ui.components.SecureWindow
 import app.locker.vault.ui.components.decodeQrCode
 import app.locker.vault.ui.components.decodeSampledBitmap
@@ -76,6 +79,12 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
     var importing by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var importedCount by remember { mutableStateOf(0) }
+    var transferPayload by remember { mutableStateOf<String?>(null) }
+    var transferName by remember { mutableStateOf<String?>(null) }
+    var transferPassphrase by remember { mutableStateOf("") }
+    var transferItem by remember { mutableStateOf<VaultItem?>(null) }
+    var transferError by remember { mutableStateOf<String?>(null) }
+    var transferBusy by remember { mutableStateOf(false) }
 
     fun reset() {
         fileName = null
@@ -169,8 +178,105 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
         }
     }
 
+    val transferPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        reset()
+        transferPayload = null
+        transferName = null
+        transferItem = null
+        transferPassphrase = ""
+        transferError = null
+        parsing = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use {
+                        it.readBytes()
+                    } ?: ByteArray(0)
+                    val bitmap = decodeSampledBitmap(bytes, 1600, 1600)
+                        ?: throw PasswordImport.Unrecognized("The selected image could not be read.")
+                    val content = decodeQrCode(bitmap)
+                        ?: throw PasswordImport.Unrecognized("No QR code was found in that image.")
+                    if (!TransferCodec.looksLikeTransfer(content)) {
+                        throw PasswordImport.Unrecognized("That QR is not a Locker transfer.")
+                    }
+                    content to uri.displayName(context)
+                }
+            }
+            parsing = false
+            result.onSuccess { (content, name) ->
+                transferPayload = content
+                transferName = name
+            }.onFailure {
+                transferError = it.message ?: "The transfer QR could not be read."
+            }
+        }
+    }
+
     fun toggle(index: Int) {
         selected = if (index in selected) selected - index else selected + index
+    }
+
+    fun decryptTransfer() {
+        val payload = transferPayload ?: return
+        if (transferBusy) return
+        if (transferPassphrase.length < 8) {
+            transferError = "Enter the transfer passphrase (8+ characters)."
+            return
+        }
+        transferBusy = true
+        transferError = null
+        scope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    TransferCodec.decode(payload, transferPassphrase.toCharArray())
+                }
+            }
+            transferBusy = false
+            result.onSuccess {
+                transferItem = it
+                transferError = null
+            }.onFailure {
+                transferItem = null
+                transferError = it.message ?: "Could not decrypt the transfer."
+            }
+        }
+    }
+
+    fun importTransfer() {
+        val incoming = transferItem ?: return
+        if (transferBusy) return
+        transferBusy = true
+        transferError = null
+        scope.launch {
+            val result = app.repository.createTextItem(
+                type = incoming.type,
+                title = incoming.title,
+                body = incoming.body,
+                username = incoming.username,
+                password = incoming.password,
+                location = incoming.location,
+                website = incoming.website,
+                otpSecret = incoming.otpSecret,
+                tags = incoming.tags,
+                fields = incoming.fields,
+                favorite = false,
+                expiresAt = incoming.expiresAt,
+                requireBiometric = incoming.requireBiometric
+            )
+            transferBusy = false
+            result.onSuccess {
+                importedCount = 1
+                transferItem = null
+                transferPayload = null
+                transferName = null
+                transferPassphrase = ""
+            }.onFailure {
+                transferError = it.message ?: "Could not add the transferred item."
+            }
+        }
     }
 
     fun runImport() {
@@ -261,6 +367,65 @@ fun ImportPasswordsScreen(onBack: () -> Unit) {
                 value = parsed?.let { "${selected.size} of ${it.rows.size} selected" } ?: "No file yet",
                 onClick = { if (parsed != null && !importing && selected.isNotEmpty()) runImport() }
             )
+        }
+
+        SettingsSectionTitle("Encrypted QR transfer")
+        SettingsGroup {
+            SettingRow(
+                icon = Icons.Rounded.QrCode2,
+                tint = BrandViolet,
+                title = "Choose transfer QR",
+                value = transferName ?: "No image yet",
+                onClick = { transferPicker.launch(arrayOf("image/*")) }
+            )
+        }
+        if (transferPayload != null) {
+            Spacer(Modifier.height(10.dp))
+            LockerTextField(
+                value = transferPassphrase,
+                onValueChange = { transferPassphrase = it; transferError = null },
+                placeholder = "The passphrase used on the other device",
+                label = "Transfer passphrase"
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { decryptTransfer() }, enabled = !transferBusy) {
+                    Text("Decrypt", color = MaterialTheme.colorScheme.primary)
+                }
+                if (transferItem != null) {
+                    TextButton(onClick = { importTransfer() }, enabled = !transferBusy) {
+                        Text("Add to vault", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            transferItem?.let { incoming ->
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            incoming.title.ifBlank { incoming.type.label },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "${incoming.type.label} · ${incoming.subtitle.ifBlank { "Encrypted item" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            if (transferError != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    transferError ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
 
         parsed?.let { data ->

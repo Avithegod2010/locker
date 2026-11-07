@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.6.0-release.apk` from the latest release.
+1. Install `Locker-1.8.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -17,7 +17,10 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 - **Five vault types** — Secret (passwords), Note, Thing (real-world item), File, and Photo.
 - **Strong encryption at rest** — every payload and file is authenticated and encrypted. Plaintext is never written to the vault database or vault file directory.
-- **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security. Onboarding and the Security dialog share the same five-group formatting, and you can save a printable one-page **recovery kit PDF** with the key and step-by-step instructions.
+- **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security. Onboarding and the Security dialog share the same five-group formatting, and you can save a printable one-page **recovery kit PDF** with the key and step-by-step instructions. **Recovery shares** split the code into three paper shares; any two reconstruct it.
+- **Hidden vault (travel mode)** — set a separate hidden password and enter it at the lock screen to open an independent encrypted vault with its own keys, database, files, recovery key, and items. The real vault stays locked and untouched.
+- **Tamper detection** — the encrypted database's fingerprint is recorded on a clean lock and checked on the next unlock; a replaced or rolled-back `vault.db` raises a warning (best-effort, not cryptographic prevention).
+- **Encrypted QR transfer** — export a text item as a passphrase-protected QR image and import it on another device, with no network involved. Large files use the encrypted `.locker` backup instead.
 - **Backup and restore** — create one encrypted `.locker` archive, preview it, then merge or replace. Whole-archive integrity is verified before anything is changed.
 - **Biometric unlock** — hardware-backed Android Keystore key that requires a fresh authentication, running in a dedicated secure activity.
 - **Vault password changes** — re-wraps the vault key without touching any items; Argon2id parameters auto-upgrade on unlock.
@@ -62,6 +65,10 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 | Master key wrapping | AES-256-GCM, authenticated AAD, fresh nonce |
 | Recovery key | 24 random digits + SHA-256 check digit (legacy 32-byte Crockford Base32 keys remain valid), stretched with Argon2id; an encrypted display copy is kept for retrieval while unlocked |
 | Duress password | A separate vault space with its own wrapped keys, database, and encrypted files; the dispatcher unlocks the decoy while the real vault remains encrypted and reachable with the normal password. Failed decoy attempts use a decoy-only counter and cannot trigger the real vault's erase-after-N rule |
+| Hidden vault | A second independent vault space with its own keys, database, files, and recovery key, opened by its own password at the lock screen |
+| Recovery shares | Shamir 2-of-3 over GF(256) of the 25-digit recovery code; shares carry an index and checksum and are never stored by the app |
+| Tamper evidence | SHA-256 fingerprint of the encrypted database stored after a clean lock and compared on unlock |
+| QR transfer | AES-256-GCM under an Argon2id-derived one-time passphrase; the payload contains no plaintext |
 | Automatic backups | Encrypted `.locker` archives written to a user-picked SAF folder; the vault password copy used for the snapshot is held only for the length of the backup and wiped afterwards |
 | Launcher disguise | Activity aliases and `PackageManager` component states; the vault password is always required |
 | Item payloads | JSON encrypted with AES-256-GCM; AAD binds item id and type |
@@ -135,7 +142,7 @@ Build it with:
 
 The release variant has `DEV_BUILD=false` and defaults screenshot protection to **on**.
 
-The **1.3.1 hotfix, 1.4.0, 1.4.1, 1.5.0, and 1.6.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
+The **1.3.1 hotfix, 1.4.0, 1.4.1, 1.5.0, 1.6.0, and 1.8.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
 
 ### One-command release
 
@@ -176,7 +183,9 @@ The signed release build (version 1.6.0; R8 disabled because the build host hit 
 - **Diagnostics** showed the build/device details and exported a text file with no crash reports
 - the temporary vault was erased afterwards; the app was left at onboarding
 
-Unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), CSV/Bitwarden/ZIP import parsing, Google Authenticator migration QR parsing, item-history retention, password-generator guarantees, the calculator engine, and the predictable-password detector.
+Unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), Shamir 2-of-3 recovery shares, CSV/Bitwarden/ZIP import parsing, Google Authenticator migration QR parsing, item-history retention, password-generator guarantees, the calculator engine, and the predictable-password detector.
+
+Version **1.8.0** adds recovery shares, a hidden vault space, tamper detection, richer decoy seeding, and encrypted QR transfer. It is code-complete with 61 passing unit tests and a signed release build; on-device verification of those new security flows is still pending.
 
 Version 1.3.x had previously been exercised on the same device for the calculator disguise, in-app video recording, voice memos, document scanning, password import, smart folders, and the icon set. Version 1.2.0 was exercised for the numeric recovery code, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 
@@ -185,7 +194,9 @@ Version 1.3.x had previously been exercised on the same device for the calculato
 - Intentionally **local-only**; there is no cloud sync, account, or cross-device sharing.
 - No scheduled reminders and no Wear OS companion yet.
 - Collections support nesting, saved searches, icons, and Home pins; per-collection locks and smart rules beyond saved queries are not implemented.
-- Passkeys, encrypted QR transfer, manual CSV column remapping, 1Password JSON, live-camera QR scanning, and tablet two-pane layouts are not implemented yet. TOTP QR import reads an image through the system picker.
+- Passkeys, animated or whole-vault QR transfer, manual CSV column remapping, 1Password JSON, live-camera QR scanning, and tablet two-pane layouts are not implemented yet. QR transfer is a static image and limited to text items; TOTP QR import reads an image through the system picker.
+- The hidden vault is a separate encrypted space opened by its own lock-screen password, not a per-collection visibility flag. Items are not moved between the real and hidden spaces.
+- Tamper detection is best-effort: it catches a replaced or rolled-back `vault.db` unless an attacker can also rewrite app-private preferences.
 - Automatic backups are triggered on unlock (no WorkManager scheduling), run at most once a day, and only after a password unlock (not after a biometric-only unlock).
 - Password history and expiry dates are stored per item; there are no push notifications or reminders for upcoming expiries — they appear in **Password health** when you open the app.
 - The duress password opens a decoy vault; it does not erase the real vault. Deleting the duress password deletes the decoy only.

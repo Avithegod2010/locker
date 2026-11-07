@@ -2,6 +2,14 @@
 
 All notable changes to Locker are recorded here. Versions follow the release tags on GitHub.
 
+## 1.8.0 (in progress)
+
+- **Recovery shares** — split the numeric recovery code into three paper shares with a 2-of-3 threshold; any two reconstruct it.
+- **Tamper detection** — a fingerprint of the encrypted database is recorded on lock and checked on unlock. A replaced or rolled-back `vault.db` raises an in-app warning (best-effort detection, not cryptographic prevention).
+- **Hidden vault (travel mode)** — a separate encrypted space with its own keys, database, files, recovery key, and password, opened by entering its password on the lock screen.
+- **Decoy realism** — the decoy is seeded with a more lived-in set of backdated notes, logins, and things, and its password can be changed independently inside the decoy.
+- **Encrypted QR transfer** — send a text item to another device as a passphrase-protected QR image, decoded fully offline.
+
 ## 1.6.0
 
 - **Item templates** for logins, Wi-Fi, bank accounts, insurance policies, ID/passport, and notes.

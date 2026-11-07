@@ -139,6 +139,7 @@ fun LockScreen() {
             when (val result = app.unlockWithPassword(password.toCharArray())) {
                 is UnlockResult.Success -> password = ""
                 is UnlockResult.DuressUnlocked -> password = ""
+                is UnlockResult.HiddenUnlocked -> password = ""
                 is UnlockResult.WrongCredentials -> {
                     loading = false
                     password = ""
@@ -504,6 +505,10 @@ fun LockScreen() {
                                     recoveryError = "That key doesn't match this vault."
                                 }
                                 is UnlockResult.DuressUnlocked -> {
+                                    recoveryLoading = false
+                                    recoveryOpen = false
+                                }
+                                is UnlockResult.HiddenUnlocked -> {
                                     recoveryLoading = false
                                     recoveryOpen = false
                                 }

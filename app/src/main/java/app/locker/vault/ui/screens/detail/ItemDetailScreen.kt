@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
@@ -119,6 +120,7 @@ fun ItemDetailScreen(
     onViewPdf: (VaultItem) -> Unit,
     onEditImage: (VaultItem) -> Unit,
     onRedactPhoto: (VaultItem) -> Unit,
+    onTransferQr: (VaultItem) -> Unit,
     onOpenAttachment: (VaultItem) -> Unit
 ) {
     val app = LocalAppContainer.current
@@ -377,6 +379,15 @@ fun ItemDetailScreen(
                                                 "${item.title}.${if (item.mimeType.contains("pdf")) "pdf" else "bin"}"
                                             }
                                         )
+                                    }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("Encrypted QR transfer") },
+                                    leadingIcon = { Icon(Icons.Rounded.QrCode2, contentDescription = null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onTransferQr(item)
                                     }
                                 )
                             }

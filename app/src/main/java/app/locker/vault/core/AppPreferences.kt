@@ -52,6 +52,10 @@ data class AppSettings(
     val duressSalt: String = "",
     val duressVerifier: String = "",
     val duressFastVerifier: Boolean = false,
+    val hiddenSalt: String = "",
+    val hiddenVerifier: String = "",
+    val hiddenFastVerifier: Boolean = false,
+    val tamperDetected: Boolean = false,
     val legacyVideosMigrated: Boolean = false
 )
 
@@ -105,6 +109,10 @@ class AppPreferences(context: Context) {
         duressSalt = prefs.getString("duress_salt", null).orEmpty(),
         duressVerifier = prefs.getString("duress_verifier", null).orEmpty(),
         duressFastVerifier = prefs.getBoolean("duress_fast_verifier", false),
+        hiddenSalt = prefs.getString("hidden_salt", null).orEmpty(),
+        hiddenVerifier = prefs.getString("hidden_verifier", null).orEmpty(),
+        hiddenFastVerifier = prefs.getBoolean("hidden_fast_verifier", false),
+        tamperDetected = prefs.getBoolean("tamper_detected", false),
         legacyVideosMigrated = prefs.getBoolean("legacy_videos_migrated", false)
     )
 
@@ -159,6 +167,9 @@ class AppPreferences(context: Context) {
     fun setDuressFastVerifier(value: Boolean) =
         update { putBoolean("duress_fast_verifier", value) }
 
+    fun setTamperDetected(value: Boolean) =
+        update { putBoolean("tamper_detected", value) }
+
     fun setLegacyVideosMigrated(value: Boolean) =
         update { putBoolean("legacy_videos_migrated", value) }
 
@@ -166,6 +177,20 @@ class AppPreferences(context: Context) {
         remove("duress_salt")
         remove("duress_verifier")
         remove("duress_fast_verifier")
+    }
+
+    fun setHiddenCredentials(salt: String, verifier: String) = update {
+        putString("hidden_salt", salt)
+        putString("hidden_verifier", verifier)
+    }
+
+    fun setHiddenFastVerifier(value: Boolean) =
+        update { putBoolean("hidden_fast_verifier", value) }
+
+    fun clearHiddenCredentials() = update {
+        remove("hidden_salt")
+        remove("hidden_verifier")
+        remove("hidden_fast_verifier")
     }
 
     private fun hashCalculatorCode(value: String): String =

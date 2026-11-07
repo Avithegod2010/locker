@@ -25,6 +25,7 @@ import app.locker.vault.ui.screens.recorder.VoiceRecorderScreen
 import app.locker.vault.ui.screens.editor.ImageEditorScreen
 import app.locker.vault.ui.screens.editor.RedactPhotoScreen
 import app.locker.vault.ui.screens.editor.TextEditorScreen
+import app.locker.vault.ui.screens.editor.TransferQrScreen
 import app.locker.vault.ui.screens.home.HomeScreen
 import app.locker.vault.ui.screens.legacy.LegacyScreen
 import app.locker.vault.ui.screens.settings.AboutScreen
@@ -35,6 +36,7 @@ import app.locker.vault.ui.screens.settings.DiagnosticsScreen
 import app.locker.vault.ui.screens.settings.GeneralSettingsScreen
 import app.locker.vault.ui.screens.settings.ImportPasswordsScreen
 import app.locker.vault.ui.screens.settings.PasswordHealthScreen
+import app.locker.vault.ui.screens.settings.RecoverySharesScreen
 import app.locker.vault.ui.screens.settings.SecuritySettingsScreen
 import app.locker.vault.ui.screens.settings.TagManagerScreen
 import app.locker.vault.ui.screens.trash.TrashScreen
@@ -104,8 +106,12 @@ fun LockerNavHost() {
                 onBack = { navController.popBackStack() },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 onOpenPasswordHealth = { navController.navigate(Routes.PASSWORD_HEALTH) },
-                onOpenImport = { navController.navigate(Routes.IMPORT_PASSWORDS) }
+                onOpenImport = { navController.navigate(Routes.IMPORT_PASSWORDS) },
+                onOpenRecoveryShares = { navController.navigate(Routes.RECOVERY_SHARES) }
             )
+        }
+        composable(Routes.RECOVERY_SHARES) {
+            RecoverySharesScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { navController.popBackStack() })
@@ -195,6 +201,7 @@ fun LockerNavHost() {
                 onViewPdf = { navController.navigate(Routes.pdf(it.id)) },
                 onEditImage = { navController.navigate(Routes.editImage(it.id)) },
                 onRedactPhoto = { navController.navigate(Routes.redact(it.id)) },
+                onTransferQr = { navController.navigate(Routes.transferQr(it.id)) },
                 onOpenAttachment = { navController.navigate(Routes.item(it.id)) }
             )
         }
@@ -230,6 +237,15 @@ fun LockerNavHost() {
             arguments = listOf(navArgument("id") { type = NavType.StringType })
         ) { entry ->
             RedactPhotoScreen(
+                itemId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Routes.TRANSFER_QR,
+            arguments = listOf(navArgument("id") { type = NavType.StringType })
+        ) { entry ->
+            TransferQrScreen(
                 itemId = entry.arguments?.getString("id").orEmpty(),
                 onBack = { navController.popBackStack() }
             )

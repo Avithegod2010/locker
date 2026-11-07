@@ -82,12 +82,13 @@ class VaultRepository(
         favorite: Boolean = false,
         parentId: String = "",
         expiresAt: Long = 0L,
-        requireBiometric: Boolean = false
+        requireBiometric: Boolean = false,
+        createdAt: Long = System.currentTimeMillis(),
+        updatedAt: Long = createdAt
     ): Result<VaultItem> = runCatching {
         withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
             try {
-                val now = System.currentTimeMillis()
                 val item = VaultItem(
                     id = UUID.randomUUID().toString(),
                     type = type,
@@ -103,8 +104,8 @@ class VaultRepository(
                     favorite = favorite,
                     collectionIds = collectionIds.distinct(),
                     parentId = parentId,
-                    createdAt = now,
-                    updatedAt = now,
+                    createdAt = createdAt,
+                    updatedAt = updatedAt,
                     expiresAt = expiresAt.coerceAtLeast(0L),
                     requireBiometric = requireBiometric
                 )

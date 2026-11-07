@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -380,6 +381,12 @@ fun HomeScreen(navController: NavController) {
                         onMenu = { scope.launch { drawerState.open() } },
                         onShield = { showPrivacySheet = true }
                     )
+
+                    if (settings.tamperDetected) {
+                        TamperWarningBanner(
+                            onDismiss = { app.preferences.setTamperDetected(false) }
+                        )
+                    }
 
                     if (selectionMode) {
                         SelectionBar(
@@ -1565,4 +1572,42 @@ private fun BulkTagDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+private fun TamperWarningBanner(onDismiss: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = BrandAmber.copy(alpha = 0.14f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.Warning,
+                contentDescription = null,
+                tint = BrandAmber,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Database integrity warning",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "vault.db differs from the last clean lock. It may have been replaced, restored, or rolled back.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+            TextButton(onClick = onDismiss) { Text("Dismiss") }
+        }
+    }
 }

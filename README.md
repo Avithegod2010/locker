@@ -185,11 +185,11 @@ Version 1.3.x had previously been exercised on the same device for the calculato
 - Intentionally **local-only**; there is no cloud sync, account, or cross-device sharing.
 - No scheduled reminders and no Wear OS companion yet.
 - Collections support nesting, saved searches, icons, and Home pins; per-collection locks and smart rules beyond saved queries are not implemented.
-- Passkeys, encrypted QR transfer, import from Bitwarden/1Password JSON or Dashlane ZIP, manual column remapping, and tablet two-pane layouts are not implemented yet.
+- Passkeys, encrypted QR transfer, manual CSV column remapping, 1Password JSON, live-camera QR scanning, and tablet two-pane layouts are not implemented yet. TOTP QR import reads an image through the system picker.
 - Automatic backups are triggered on unlock (no WorkManager scheduling), run at most once a day, and only after a password unlock (not after a biometric-only unlock).
 - Password history and expiry dates are stored per item; there are no push notifications or reminders for upcoming expiries — they appear in **Password health** when you open the app.
 - The duress password opens a decoy vault; it does not erase the real vault. Deleting the duress password deletes the decoy only.
-- Autofill is designed for the unlocked vault and does not yet require a per-fill biometric prompt.
+- Autofill is designed for the unlocked vault and does not yet offer inline suggestions or a per-fill biometric prompt; items marked **Require biometrics** are excluded from autofill.
 - English UI only.
 - Legacy is an encrypted emergency-contact/notes page; it does not automatically transmit anything to contacts.
 

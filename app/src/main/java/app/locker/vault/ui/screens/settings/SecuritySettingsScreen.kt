@@ -55,6 +55,7 @@ import android.net.Uri
 import android.provider.Settings
 import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.core.Crypto
+import app.locker.vault.core.DeviceIntegrity
 import app.locker.vault.core.DisguiseManager
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.ui.LocalAppContainer
@@ -112,6 +113,7 @@ fun SecuritySettingsScreen(
     var duressConfirm by remember { mutableStateOf("") }
 
     val biometricAvailable = remember { app.biometricKeyStore.canAuthenticate() }
+    val deviceRooted = remember { DeviceIntegrity.isProbablyRooted() }
     val autoLockOptions = listOf(
         ChoiceOption("Immediately", "Lock as soon as Locker leaves the foreground"),
         ChoiceOption("After 30 seconds"),
@@ -148,6 +150,15 @@ fun SecuritySettingsScreen(
     val wipeValues = listOf(0, 5, 10, 15)
 
     SettingsScaffold(title = "Security", onBack = onBack) {
+        if (deviceRooted) {
+            InfoBanner(
+                icon = Icons.Rounded.Warning,
+                tint = BrandCoral,
+                title = "Device integrity warning",
+                text = "This phone looks rooted or is running a test build. On modified systems, screenshot blocking and Android Keystore protections are weaker than usual. Locker still encrypts everything, but the operating system itself may be able to inspect the unlocked app."
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         Spacer(Modifier.height(6.dp))
         InfoBanner(
             icon = Icons.Rounded.Shield,
@@ -274,14 +285,16 @@ fun SecuritySettingsScreen(
 
         SettingsSectionTitle("Data")
         SettingsGroup {
-            SettingRow(
-                icon = Icons.Rounded.Archive,
-                tint = BrandBlue,
-                title = "Encrypted backup & restore",
-                subtitle = "Create or restore a .locker archive. The app never uploads it.",
-                onClick = onOpenBackup
-            )
-            RowDivider()
+            if (!app.isDecoyActive) {
+                SettingRow(
+                    icon = Icons.Rounded.Archive,
+                    tint = BrandBlue,
+                    title = "Encrypted backup & restore",
+                    subtitle = "Create or restore a .locker archive. The app never uploads it.",
+                    onClick = onOpenBackup
+                )
+                RowDivider()
+            }
             SettingRow(
                 icon = Icons.Rounded.Key,
                 tint = BrandCoral,
@@ -316,13 +329,13 @@ fun SecuritySettingsScreen(
                 value = DisguiseManager.labelFor(settings.disguiseMode),
                 onClick = { showDisguise = true }
             )
-            if (settings.disguiseMode == DisguiseManager.ID_CALCULATOR) {
+            if (settings.disguiseMode != DisguiseManager.ID_NONE) {
                 RowDivider()
                 SettingRow(
                     icon = Icons.Rounded.Calculate,
                     tint = BrandBlue,
-                    title = "Calculator unlock code",
-                    subtitle = "Type this code, then press =, to reach the lock screen.",
+                    title = "Disguise passcode",
+                    subtitle = "Used by Calculator, Notes, and Calendar. Long-press the title in Notes or Calendar.",
                     value = if (app.preferences.hasCustomCalculatorCode()) "Custom" else "1234",
                     onClick = {
                         calculatorCode = ""
@@ -350,42 +363,54 @@ fun SecuritySettingsScreen(
         }
 
         SettingsSectionTitle("Duress")
-        InfoBanner(
-            icon = Icons.Rounded.Shield,
-            tint = BrandCoral,
-            title = "A second password with a catch",
-            text = "If you are ever forced to unlock, entering the duress password erases the real vault permanently and opens a fresh decoy vault containing harmless example notes. There is no undo, so only set one you will never type by accident."
-        )
-        Spacer(Modifier.height(10.dp))
-        SettingsGroup {
-            SettingRow(
-                icon = Icons.Rounded.Key,
-                tint = BrandCoral,
-                title = "Duress password",
-                subtitle = "Erases everything, then opens a clean decoy vault.",
-                value = if (settings.duressVerifier.isNotBlank()) "On" else "Off",
-                onClick = {
-                    duressPassword = ""
-                    duressConfirm = ""
-                    showDuress = true
-                }
+        if (!app.isDecoyActive) {
+            InfoBanner(
+                icon = Icons.Rounded.Shield,
+                tint = BrandMint,
+                title = "A decoy vault, not a wipe",
+                text = "The duress password opens a separate, harmless vault with example entries. Your real vault stays encrypted and untouched, and your normal password still opens it. The decoy has its own independent keys, database, and files."
             )
-            if (settings.duressVerifier.isNotBlank()) {
-                RowDivider()
+            Spacer(Modifier.height(10.dp))
+            SettingsGroup {
                 SettingRow(
                     icon = Icons.Rounded.Key,
-                    tint = BrandMint,
-                    title = "Remove duress password",
+                    tint = BrandCoral,
+                    title = "Duress password",
+                    subtitle = "Opens a separate decoy vault; the real vault stays intact.",
+                    value = if (settings.duressVerifier.isNotBlank()) "On" else "Off",
                     onClick = {
-                        app.session.clearDuressPassword()
-                        android.widget.Toast.makeText(
-                            context,
-                            "Duress password removed",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
+                        duressPassword = ""
+                        duressConfirm = ""
+                        showDuress = true
                     }
                 )
+                if (settings.duressVerifier.isNotBlank()) {
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Rounded.Key,
+                        tint = BrandMint,
+                        title = "Remove duress password",
+                        subtitle = "Deletes the decoy vault. Your real vault is unaffected.",
+                        onClick = {
+                            scope.launch {
+                                app.clearDuressPassword()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Duress password removed",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
+                }
             }
+        } else {
+            InfoBanner(
+                icon = Icons.Rounded.Shield,
+                tint = BrandViolet,
+                title = "This is the decoy vault",
+                text = "Settings that could reveal or affect the real vault are hidden here. Use your normal password on the lock screen to return to the real vault."
+            )
         }
 
         SettingsSectionTitle("Locking")
@@ -510,13 +535,15 @@ fun SecuritySettingsScreen(
             )
         }
 
-        SettingsSectionTitle("Danger zone")
-        DangerZoneCard(
-            title = "Erase this vault",
-            description = "Permanently delete every item, file, collection, and key from this device. There is no undo and no cloud copy.",
-            actionLabel = "Erase vault",
-            onClick = { showWipeVault = true }
-        )
+        if (!app.isDecoyActive) {
+            SettingsSectionTitle("Danger zone")
+            DangerZoneCard(
+                title = "Erase this vault",
+                description = "Permanently delete every item, file, collection, and key from this device. There is no undo and no cloud copy.",
+                actionLabel = "Erase vault",
+                onClick = { showWipeVault = true }
+            )
+        }
 
         Spacer(Modifier.height(34.dp))
     }
@@ -564,11 +591,11 @@ fun SecuritySettingsScreen(
             onDismissRequest = { showCalculatorCode = false },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(28.dp),
-            title = { Text("Calculator unlock code") },
+            title = { Text("Disguise passcode") },
             text = {
                 Column {
                     Text(
-                        "Type this code inside the calculator and press =. It only reveals Locker's lock screen — your vault password is still required.",
+                        "Type this code in the calculator and press =, or long-press the title in Notes or Calendar, to reveal Locker's lock screen. Your vault password is still required afterwards.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -577,7 +604,7 @@ fun SecuritySettingsScreen(
                         value = calculatorCode,
                         onValueChange = { calculatorCode = it.filter(Char::isDigit).take(8) },
                         placeholder = "4–8 digits",
-                        label = "Unlock code",
+                        label = "Passcode",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         isSensitive = true
                     )
@@ -597,7 +624,7 @@ fun SecuritySettingsScreen(
                         showCalculatorCode = false
                         android.widget.Toast.makeText(
                             context,
-                            "Calculator code saved",
+                            "Disguise passcode saved",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -618,9 +645,9 @@ fun SecuritySettingsScreen(
             text = {
                 Column {
                     Text(
-                        "Entering this password on the lock screen permanently erases the real vault and opens a fresh decoy vault with harmless example entries. This cannot be undone.",
+                        "Entering this password at the lock screen opens a separate decoy vault with harmless example entries. Your real vault is not erased, and your normal password still unlocks it. Resetting the duress password rebuilds the decoy's contents.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(14.dp))
                     LockerTextField(
@@ -663,11 +690,11 @@ fun SecuritySettingsScreen(
                             duressPassword = ""
                             duressConfirm = ""
                             scope.launch {
-                                val result = app.session.setDuressPassword(value.toCharArray())
+                                val result = app.setDuressPassword(value.toCharArray())
                                 android.widget.Toast.makeText(
                                     context,
                                     result.fold(
-                                        { "Duress password set" },
+                                        { "Duress password set — decoy vault ready" },
                                         { it.message ?: "Could not set duress password" }
                                     ),
                                     android.widget.Toast.LENGTH_LONG

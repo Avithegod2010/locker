@@ -37,7 +37,8 @@ class SessionManager(
     private val keyMaterialStore: KeyMaterialStore,
     private val biometricKeyStore: BiometricKeyStore,
     private val fileStore: EncryptedFileStore,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val failureScope: String = "main"
 ) {
     private val _state = MutableStateFlow(
         if (keyMaterialStore.hasVault()) SessionState.LOCKED else SessionState.SETUP
@@ -52,7 +53,7 @@ class SessionManager(
     private var externalHoldJob: Job? = null
     private var externalHoldCount = 0
     private var appInBackground = false
-    private var failedAttempts = preferences.failedAttempts()
+    private var failedAttempts = preferences.failedAttempts(failureScope)
     private var lockEpoch = 0
 
     /** Wired by the app container so a freshly created vault gets its starter collections. */
@@ -113,21 +114,14 @@ class SessionManager(
         val attempt = failedAttempts + 1
         failedAttempts = attempt
         // commit() so force-stopping the process cannot outrun the attempt counter
-        preferences.setFailedAttempts(attempt)
+        preferences.setFailedAttempts(attempt, failureScope)
         try {
             val unwrapped = keyMaterialStore.unwrapWithPassword(password)
-            if (unwrapped == null) {
-                if (matchesDuressPassword(password)) {
-                    failedAttempts = 0
-                    preferences.setFailedAttempts(0)
-                    return@withContext performDuressUnlock(password)
-                }
-                return@withContext registerFailure(attempt)
-            }
+                ?: return@withContext registerFailure(attempt)
             if (lockEpoch != epoch) {
                 Crypto.wipe(unwrapped)
                 failedAttempts = 0
-                preferences.setFailedAttempts(0)
+                preferences.setFailedAttempts(0, failureScope)
                 return@withContext UnlockResult.Failure("Vault locked during unlock")
             }
             rememberPasswordForBackup(password)
@@ -135,6 +129,29 @@ class SessionManager(
             UnlockResult.Success
         } catch (t: Throwable) {
             UnlockResult.Failure(t.message ?: "Could not unlock")
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
+    /**
+     * Verifies a password without touching the failed-attempt counter. Used to let the real
+     * password open the real vault from the decoy's lock screen without risking its
+     * erase-after-N-attempts protection.
+     */
+    suspend fun tryUnlockQuiet(password: CharArray): Boolean = withContext(Dispatchers.Default) {
+        val epoch = lockEpoch
+        try {
+            val unwrapped = keyMaterialStore.unwrapWithPassword(password) ?: return@withContext false
+            if (lockEpoch != epoch) {
+                Crypto.wipe(unwrapped)
+                return@withContext false
+            }
+            rememberPasswordForBackup(password)
+            completeUnlock(unwrapped, viaRecovery = false)
+            true
+        } catch (_: Throwable) {
+            false
         } finally {
             password.fill('\u0000')
         }
@@ -188,26 +205,46 @@ class SessionManager(
 
     fun clearDuressPassword() = preferences.clearDuressCredentials()
 
-    private fun matchesDuressPassword(password: CharArray): Boolean {
+    /** True when this space has a biometric-wrapped payload (main vault only by default). */
+    fun hasBiometricPayload(): Boolean = keyMaterialStore.biometricPayload() != null
+
+    /**
+     * Fast dispatcher check used by the unlock coordinator to decide whether the entered
+     * password should open the decoy space. New verifiers are salted SHA-256 (they protect
+     * only the fake vault dispatch, never real data); legacy Argon2 verifiers still match.
+     */
+    fun matchesDuressPassword(password: CharArray): Boolean {
         val settings = preferences.settings.value
         if (settings.duressVerifier.isBlank() || settings.duressSalt.isBlank()) return false
         val salt = Crypto.b64decode(settings.duressSalt) ?: return false
         val expected = Crypto.b64decode(settings.duressVerifier) ?: return false
-        return try {
-            val key = Crypto.deriveKey(password, salt, Crypto.currentKdfParams)
-            val actual = try {
-                Crypto.sha256(key)
-            } finally {
-                Crypto.wipe(key)
-            }
+        return if (settings.duressFastVerifier) {
+            val actual = Crypto.sha256(
+                salt + password.concatToString().toByteArray(Charsets.UTF_8)
+            )
             try {
-                actual.size == expected.size && actual.indices.all { actual[it] == expected[it] }
+                actual.contentEquals(expected)
             } finally {
                 Crypto.wipe(actual)
                 Crypto.wipe(expected)
             }
-        } catch (_: Exception) {
-            false
+        } else {
+            try {
+                val key = Crypto.deriveKey(password, salt, Crypto.currentKdfParams)
+                val actual = try {
+                    Crypto.sha256(key)
+                } finally {
+                    Crypto.wipe(key)
+                }
+                try {
+                    actual.contentEquals(expected)
+                } finally {
+                    Crypto.wipe(actual)
+                    Crypto.wipe(expected)
+                }
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 
@@ -225,7 +262,7 @@ class SessionManager(
             masterKey = created.masterKey
             _pendingRecoveryCode.value = null
             failedAttempts = 0
-            preferences.setFailedAttempts(0)
+            preferences.setFailedAttempts(0, failureScope)
             preferences.setBiometricEnabled(false)
             preferences.setRecoveryUsed(false)
             _state.value = SessionState.UNLOCKED
@@ -439,16 +476,37 @@ class SessionManager(
         unlockPasswordCopy = null
         _pendingRecoveryCode.value = null
         failedAttempts = 0
-        preferences.setFailedAttempts(0)
+        preferences.setFailedAttempts(0, failureScope)
         onLocked?.invoke()
         _state.value = SessionState.SETUP
+    }
+
+    /**
+     * Ends a just-created vault session without going through onboarding screens. Used by
+     * the decoy space after its starter content has been seeded.
+     */
+    fun forceLocked() {
+        lockEpoch++
+        masterKey?.fill(0)
+        masterKey = null
+        unlockPasswordCopy?.fill('\u0000')
+        unlockPasswordCopy = null
+        _pendingRecoveryCode.value = null
+        failedAttempts = 0
+        preferences.setFailedAttempts(0, failureScope)
+        onLocked?.invoke()
+        _state.value = if (keyMaterialStore.hasVault()) {
+            SessionState.LOCKED
+        } else {
+            SessionState.SETUP
+        }
     }
 
     private fun completeUnlock(key: ByteArray, viaRecovery: Boolean) {
         masterKey?.fill(0)
         masterKey = key
         failedAttempts = 0
-        preferences.setFailedAttempts(0)
+        preferences.setFailedAttempts(0, failureScope)
         _state.value = SessionState.UNLOCKED
     }
 
@@ -463,3 +521,4 @@ class SessionManager(
         return UnlockResult.WrongCredentials
     }
 }
+

@@ -1,6 +1,7 @@
 package app.locker.vault.ui.screens.settings
 
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.documentfile.provider.DocumentFile
 import app.locker.vault.core.Formatting
 import app.locker.vault.data.BackupPreview
 import app.locker.vault.data.BackupSummary
@@ -51,6 +55,8 @@ import app.locker.vault.ui.theme.BrandBlue
 import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,6 +90,9 @@ fun BackupScreen(onBack: () -> Unit) {
     var lastSummary by remember { mutableStateOf<BackupSummary?>(null) }
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
     var showKeep by remember { mutableStateOf(false) }
+    var showVerifyBackup by remember { mutableStateOf(false) }
+    var verifyBackupPassword by remember { mutableStateOf("") }
+    var verifyingBackup by remember { mutableStateOf(false) }
 
     val createLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -174,8 +183,13 @@ fun BackupScreen(onBack: () -> Unit) {
                 icon = Icons.Rounded.Archive,
                 tint = BrandBlue,
                 title = "Daily automatic backup",
-                subtitle = "Runs on the next password unlock when a day has passed.",
+                subtitle = if (app.isDecoyActive) {
+                    "Disabled inside the decoy vault."
+                } else {
+                    "Runs on the next password unlock when a day has passed."
+                },
                 checked = settings.autoBackupEnabled,
+                enabled = !app.isDecoyActive,
                 onCheckedChange = { enabled ->
                     if (enabled && settings.autoBackupTreeUri.isBlank()) {
                         app.session.beginExternalActivity()
@@ -205,6 +219,32 @@ fun BackupScreen(onBack: () -> Unit) {
                 subtitle = lastBackupLabel(settings.autoBackupLastAt),
                 value = "${settings.autoBackupKeep}",
                 onClick = { showKeep = true }
+            )
+            RowDivider()
+            SettingRow(
+                icon = Icons.Rounded.CheckCircle,
+                tint = BrandMint,
+                title = "Verify latest snapshot",
+                subtitle = "Restore drill: decrypts the newest archive without touching the vault.",
+                value = if (verifyingBackup) "Checking…" else "Run",
+                onClick = {
+                    when {
+                        app.isDecoyActive -> android.widget.Toast.makeText(
+                            context,
+                            "Automatic backups are disabled in the decoy vault",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        settings.autoBackupTreeUri.isBlank() -> android.widget.Toast.makeText(
+                            context,
+                            "Choose a backup folder first",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        else -> {
+                            verifyBackupPassword = ""
+                            showVerifyBackup = true
+                        }
+                    }
+                }
             )
         }
 
@@ -238,6 +278,100 @@ fun BackupScreen(onBack: () -> Unit) {
                 confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = { showKeep = false }) { Text("Close") }
+                }
+            )
+        }
+
+        if (showVerifyBackup) {
+            AlertDialog(
+                onDismissRequest = { if (!verifyingBackup) showVerifyBackup = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(28.dp),
+                title = { Text("Verify latest snapshot") },
+                text = {
+                    Column {
+                        Text(
+                            "Enter the backup password (usually your vault password). The newest automatic archive is decrypted and checked; the vault is not modified.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        LockerTextField(
+                            value = verifyBackupPassword,
+                            onValueChange = { verifyBackupPassword = it },
+                            placeholder = "Backup password",
+                            label = "Password",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            visualTransformation = PasswordVisualTransformation(),
+                            isSensitive = true
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = verifyBackupPassword.length >= 10 && !verifyingBackup,
+                        onClick = {
+                            val password = verifyBackupPassword
+                            verifyBackupPassword = ""
+                            verifyingBackup = true
+                            scope.launch {
+                                val latest = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        DocumentFile.fromTreeUri(
+                                            context,
+                                            Uri.parse(settings.autoBackupTreeUri)
+                                        )
+                                            ?.listFiles()
+                                            ?.filter {
+                                                it.isFile &&
+                                                    it.name?.startsWith("Locker-backup-") == true
+                                            }
+                                            ?.maxByOrNull { it.name.orEmpty() }
+                                    }.getOrNull()
+                                }
+                                if (latest == null) {
+                                    verifyingBackup = false
+                                    showVerifyBackup = false
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "No automatic snapshot found",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@launch
+                                }
+                                val result = withContext(Dispatchers.IO) {
+                                    app.backupManager.inspect(
+                                        latest.uri,
+                                        password.toCharArray()
+                                    )
+                                }
+                                verifyingBackup = false
+                                showVerifyBackup = false
+                                android.widget.Toast.makeText(
+                                    context,
+                                    result.fold(
+                                        { "Snapshot verified · ${it.itemCount} items" },
+                                        { it.message ?: "Verification failed" }
+                                    ),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    ) {
+                        if (verifyingBackup) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Verify")
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { if (!verifyingBackup) showVerifyBackup = false }
+                    ) { Text("Cancel") }
                 }
             )
         }

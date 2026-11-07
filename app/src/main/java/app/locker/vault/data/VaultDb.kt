@@ -27,9 +27,12 @@ data class NameRow(
  * in the clear. The item type is needed to choose the right integrity-bound AAD before
  * decryption and is therefore visible in a raw database image.
  */
-class VaultDb(context: Context) : SQLiteOpenHelper(
+class VaultDb(
+    context: Context,
+    private val databaseName: String = DATABASE_NAME
+) : SQLiteOpenHelper(
     context.applicationContext,
-    DATABASE_NAME,
+    databaseName,
     null,
     DATABASE_VERSION
 ) {
@@ -270,7 +273,7 @@ class VaultDb(context: Context) : SQLiteOpenHelper(
 
     fun wipeAndClose() {
         close()
-        appContext.deleteDatabase(DATABASE_NAME)
+        appContext.deleteDatabase(databaseName)
     }
 
     private val appContext: Context = context.applicationContext

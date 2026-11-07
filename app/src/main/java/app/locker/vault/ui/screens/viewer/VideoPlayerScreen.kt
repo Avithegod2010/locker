@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -81,6 +82,7 @@ fun VideoPlayerScreen(
     var trimming by remember { mutableStateOf(false) }
     var trimStart by remember { mutableStateOf(0f) }
     var trimEnd by remember { mutableStateOf(0f) }
+    var replaceOriginal by remember { mutableStateOf(true) }
 
     LaunchedEffect(itemId) {
         val current = item
@@ -183,6 +185,73 @@ fun VideoPlayerScreen(
                 "${context.packageName}.files",
                 output
             )
+
+            if (replaceOriginal) {
+                val originalUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.files",
+                    input
+                )
+                val backup = app.repository.importFile(
+                    uri = originalUri,
+                    type = current.type,
+                    title = "${current.title} (original)",
+                    collectionIds = current.collectionIds
+                )
+                if (backup.isFailure) {
+                    // Never risk the only copy: fall back to a separate clip.
+                    val clip = app.repository.importFile(
+                        uri = uri,
+                        type = VaultType.VIDEO,
+                        title = "${current.title} (clip)",
+                        collectionIds = current.collectionIds
+                    )
+                    output.delete()
+                    trimming = false
+                    showTrim = false
+                    android.widget.Toast.makeText(
+                        context,
+                        if (clip.isSuccess) {
+                            "Backup copy failed — trimmed clip saved separately"
+                        } else {
+                            clip.exceptionOrNull()?.message ?: "Could not save the clip"
+                        },
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                val replaced = app.repository.replaceMediaFile(current.id, uri)
+                output.delete()
+                trimming = false
+                showTrim = false
+                if (replaced.isSuccess) {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Trimmed in place — original kept as \"${current.title} (original)\"",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                    onBack()
+                } else {
+                    val clip = app.repository.importFile(
+                        uri = uri,
+                        type = VaultType.VIDEO,
+                        title = "${current.title} (clip)",
+                        collectionIds = current.collectionIds
+                    )
+                    android.widget.Toast.makeText(
+                        context,
+                        if (clip.isSuccess) {
+                            "Original kept; trimmed clip saved separately"
+                        } else {
+                            replaced.exceptionOrNull()?.message ?: "Could not save the clip"
+                        },
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+                return@launch
+            }
+
             val result = app.repository.importFile(
                 uri = uri,
                 type = VaultType.VIDEO,
@@ -352,6 +421,28 @@ fun VideoPlayerScreen(
                     onValueChange = { trimEnd = it },
                     valueRange = 1f..(durationMs / 1000f).coerceAtLeast(2f)
                 )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Replace original",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Keeps a copy named \"(original)\" in the vault.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = replaceOriginal,
+                        onCheckedChange = { replaceOriginal = it }
+                    )
+                }
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = { if (!trimming) showTrim = false }) {

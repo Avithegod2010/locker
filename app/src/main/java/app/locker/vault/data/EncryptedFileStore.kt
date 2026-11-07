@@ -44,10 +44,10 @@ data class ImportedFile(
  * On-disk layout:
  *   "LKR1" | version (1) | nonce prefix (8) | repeated [ ciphertext length (4) | ciphertext+tag ]
  */
-class EncryptedFileStore(context: Context) {
+class EncryptedFileStore(context: Context, dirName: String = "vault") {
     private val appContext = context.applicationContext
     private val resolver = appContext.contentResolver
-    private val vaultDir = File(appContext.filesDir, "vault").apply { mkdirs() }
+    private val vaultDir = File(appContext.filesDir, dirName).apply { mkdirs() }
     private val shareDir = File(appContext.cacheDir, "share").apply { mkdirs() }
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

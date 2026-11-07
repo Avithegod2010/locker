@@ -115,8 +115,61 @@ class VaultRepository(
         }
     }
 
-    suspend fun updateItem(item: VaultItem): Result<VaultItem> = runCatching {
+    /** Replaces an item's encrypted body in place (video trimming). */
+    suspend fun replaceMediaFile(itemId: String, uri: Uri): Result<VaultItem> = runCatching {
         withContext(Dispatchers.IO) {
+            val key = session.requireMasterKey()
+            try {
+                writeMutex.withLock {
+                    val row = db.readItems().firstOrNull { it.id == itemId }
+                        ?: error("Item no longer exists")
+                    val current = decodeItem(row, key) ?: error("Could not read the item")
+                    val info = files.describe(uri)
+                    val imported = files.importFile(
+                        uri = uri,
+                        itemId = itemId,
+                        mimeType = info.mimeType,
+                        masterKey = key,
+                        generateThumbnail = info.mimeType.startsWith("image/") ||
+                            info.mimeType.startsWith("video/")
+                    )
+                    val updated = current.copy(
+                        type = if (info.mimeType.startsWith("video/")) {
+                            VaultType.VIDEO
+                        } else {
+                            current.type
+                        },
+                        fileName = info.displayName,
+                        mimeType = info.mimeType,
+                        sizeBytes = imported.sizeBytes,
+                        wrappedFileKey = imported.wrappedFileKey,
+                        hasThumbnail = imported.hasThumbnail,
+                        contentHash = imported.contentHash,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    upsertItemLocked(key, updated)
+                    reload(key)
+                    updated
+                }
+            } finally {
+                Crypto.wipe(key)
+            }
+        }
+    }
+
+    /** Upgrades old FILE items whose MIME type is video to the first-class VIDEO type. */
+    suspend fun migrateLegacyVideoTypes(): Int {
+        val legacy = _items.value.filter {
+            it.type == VaultType.FILE && it.mimeType.startsWith("video/")
+        }
+        var migrated = 0
+        legacy.forEach { item ->
+            if (updateItem(item.copy(type = VaultType.VIDEO)).isSuccess) migrated++
+        }
+        return migrated
+    }
+
+    suspend fun updateItem(item: VaultItem): Result<VaultItem> = runCatching {        withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
             try {
                 val updated = item.copy(

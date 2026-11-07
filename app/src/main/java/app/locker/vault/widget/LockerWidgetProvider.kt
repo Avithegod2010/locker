@@ -9,6 +9,7 @@ import android.widget.RemoteViews
 import app.locker.vault.LockerApp
 import app.locker.vault.MainActivity
 import app.locker.vault.R
+import app.locker.vault.core.DisguiseManager
 import app.locker.vault.core.SessionState
 
 class LockerWidgetProvider : AppWidgetProvider() {
@@ -57,7 +58,7 @@ class LockerWidgetProvider : AppWidgetProvider() {
         PendingIntent.getActivity(
             context,
             10,
-            Intent(context, MainActivity::class.java),
+            Intent(context, MainActivity::class.java).setComponent(launcherComponent(context)),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -77,9 +78,17 @@ class LockerWidgetProvider : AppWidgetProvider() {
         PendingIntent.getActivity(
             context,
             requestCode,
-            Intent(context, MainActivity::class.java).putExtra("shortcut", shortcut),
+            Intent(context, MainActivity::class.java)
+                .setComponent(launcherComponent(context))
+                .putExtra("shortcut", shortcut),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+    private fun launcherComponent(context: Context): android.content.ComponentName {
+        val lockerApp = context.applicationContext as LockerApp
+        val disguise = lockerApp.container.preferences.settings.value.disguiseMode
+        return DisguiseManager.componentFor(context, disguise)
+    }
 
     companion object {
         private const val ACTION_LOCK = "app.locker.vault.widget.LOCK"

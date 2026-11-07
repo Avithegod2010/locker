@@ -9,7 +9,10 @@ data class SavedSearch(
     val id: String,
     val name: String,
     val query: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val color: Long = 0xFF5B9CFF,
+    val icon: String = "search",
+    val pinned: Boolean = true
 )
 
 /**
@@ -28,7 +31,10 @@ object SavedSearches {
                 id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
                 name = obj.optString("name").ifBlank { query },
                 query = query,
-                createdAt = obj.optLong("createdAt")
+                createdAt = obj.optLong("createdAt"),
+                color = obj.optLong("color", 0xFF5B9CFF),
+                icon = obj.optString("icon", "search"),
+                pinned = obj.optBoolean("pinned", true)
             )
         }
     }.getOrDefault(emptyList())
@@ -42,6 +48,9 @@ object SavedSearches {
                     .put("name", search.name)
                     .put("query", search.query)
                     .put("createdAt", search.createdAt)
+                    .put("color", search.color)
+                    .put("icon", search.icon)
+                    .put("pinned", search.pinned)
             )
         }
         return array.toString()
@@ -59,6 +68,12 @@ object SavedSearches {
         val existing = parse(json).filterNot { it.query.equals(trimmed, ignoreCase = true) }
         return encode(existing + create(name, trimmed))
     }
+
+    fun update(json: String?, updated: SavedSearch): String =
+        encode(parse(json).map { if (it.id == updated.id) updated else it })
+
+    fun setPinned(json: String?, id: String, pinned: Boolean): String =
+        encode(parse(json).map { if (it.id == id) it.copy(pinned = pinned) else it })
 
     fun remove(json: String?, id: String): String =
         encode(parse(json).filterNot { it.id == id })

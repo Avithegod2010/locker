@@ -50,7 +50,9 @@ data class AppSettings(
     val autoBackupKeep: Int = 5,
     val autoBackupLastAt: Long = 0L,
     val duressSalt: String = "",
-    val duressVerifier: String = ""
+    val duressVerifier: String = "",
+    val duressFastVerifier: Boolean = false,
+    val legacyVideosMigrated: Boolean = false
 )
 
 /** Launcher disguise chosen by the user; see [DisguiseManager]. */
@@ -101,7 +103,9 @@ class AppPreferences(context: Context) {
         autoBackupKeep = prefs.getInt("auto_backup_keep", 5),
         autoBackupLastAt = prefs.getLong("auto_backup_last_at", 0L),
         duressSalt = prefs.getString("duress_salt", null).orEmpty(),
-        duressVerifier = prefs.getString("duress_verifier", null).orEmpty()
+        duressVerifier = prefs.getString("duress_verifier", null).orEmpty(),
+        duressFastVerifier = prefs.getBoolean("duress_fast_verifier", false),
+        legacyVideosMigrated = prefs.getBoolean("legacy_videos_migrated", false)
     )
 
     private fun update(block: android.content.SharedPreferences.Editor.() -> Unit) {
@@ -152,23 +156,34 @@ class AppPreferences(context: Context) {
         putString("duress_verifier", verifier)
     }
 
+    fun setDuressFastVerifier(value: Boolean) =
+        update { putBoolean("duress_fast_verifier", value) }
+
+    fun setLegacyVideosMigrated(value: Boolean) =
+        update { putBoolean("legacy_videos_migrated", value) }
+
     fun clearDuressCredentials() = update {
         remove("duress_salt")
         remove("duress_verifier")
+        remove("duress_fast_verifier")
     }
 
     private fun hashCalculatorCode(value: String): String =
         Crypto.sha256(value.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
 
-    fun failedAttempts(): Int = prefs.getInt("failed_attempts", 0)
+    fun failedAttempts(scope: String = "main"): Int {
+        val key = if (scope == "main") "failed_attempts" else "failed_attempts_$scope"
+        return prefs.getInt(key, 0)
+    }
 
     /**
      * commit() is deliberate: a wrong-password counter must survive an immediate process kill,
      * otherwise force-stopping the app could bypass the erase-after-N-attempts protection.
      */
-    fun setFailedAttempts(value: Int) {
-        prefs.edit().putInt("failed_attempts", value).commit()
+    fun setFailedAttempts(value: Int, scope: String = "main") {
+        val key = if (scope == "main") "failed_attempts" else "failed_attempts_$scope"
+        prefs.edit().putInt(key, value).commit()
         _settings.value = read()
     }
 

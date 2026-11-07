@@ -16,8 +16,8 @@ data class BiometricPayload(
  * Persists only *wrapped* copies of the vault master key. Nothing here can be decrypted
  * without the user's password, recovery key, or an authenticated biometric Keystore key.
  */
-class KeyMaterialStore(context: Context) {
-    private val prefs = context.getSharedPreferences("locker_key_material", Context.MODE_PRIVATE)
+class KeyMaterialStore(context: Context, prefsName: String = "locker_key_material") {
+    private val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
     fun hasVault(): Boolean = prefs.contains(KEY_WRAPPED_MASTER)
 

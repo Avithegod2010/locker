@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,12 +32,15 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -83,10 +87,22 @@ fun CollectionsScreen(
     }
     var showCreate by remember { mutableStateOf(false) }
     var showSmartFolder by remember { mutableStateOf(false) }
+    var editingSmart by remember { mutableStateOf<SavedSearch?>(null) }
     var smartName by remember { mutableStateOf("") }
     var smartQuery by remember { mutableStateOf("") }
+    var smartIcon by remember { mutableStateOf("search") }
+    var smartPinned by remember { mutableStateOf(true) }
     val active = items.filter { it.deletedAt == null }
     val roots = collections.filter { it.parentId.isBlank() }
+
+    fun openSmartFolder(existing: SavedSearch?) {
+        editingSmart = existing
+        smartName = existing?.name.orEmpty()
+        smartQuery = existing?.query.orEmpty()
+        smartIcon = existing?.icon ?: "search"
+        smartPinned = existing?.pinned ?: true
+        showSmartFolder = true
+    }
 
     Column(
         Modifier
@@ -97,7 +113,7 @@ fun CollectionsScreen(
             title = "Collections",
             onBack = onBack,
             actions = {
-                IconButton(onClick = { showSmartFolder = true }) {
+                IconButton(onClick = { openSmartFolder(null) }) {
                     Icon(
                         Icons.Rounded.Search,
                         contentDescription = "New smart folder",
@@ -140,6 +156,7 @@ fun CollectionsScreen(
                                         app.pendingSearch.value = search.query
                                         onBack()
                                     },
+                                    onEdit = { openSmartFolder(search) },
                                     onDelete = {
                                         app.preferences.setSavedSearchesJson(
                                             SavedSearches.remove(settings.savedSearchesJson, search.id)
@@ -176,7 +193,7 @@ fun CollectionsScreen(
             onDismissRequest = { showSmartFolder = false },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(28.dp),
-            title = { Text("New smart folder") },
+            title = { Text(if (editingSmart == null) "New smart folder" else "Edit smart folder") },
             text = {
                 Column {
                     Text(
@@ -198,17 +215,96 @@ fun CollectionsScreen(
                         placeholder = "type:secret tag:bank",
                         label = "Search query"
                     )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "ICON",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        listOf("search", "star", "lock", "folder").forEach { icon ->
+                            val selected = smartIcon == icon
+                            Surface(
+                                onClick = { smartIcon = icon },
+                                shape = CircleShape,
+                                color = if (selected) {
+                                    Color(smartColorFor(icon)).copy(alpha = 0.22f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainer
+                                }
+                            ) {
+                                Icon(
+                                    smartIconFor(icon),
+                                    contentDescription = icon,
+                                    tint = Color(smartColorFor(icon)),
+                                    modifier = Modifier
+                                        .padding(10.dp)
+                                        .size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Pin to Home",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = smartPinned,
+                            onCheckedChange = { smartPinned = it }
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     enabled = smartQuery.isNotBlank(),
                     onClick = {
-                        app.preferences.setSavedSearchesJson(
-                            SavedSearches.add(settings.savedSearchesJson, smartName, smartQuery)
-                        )
+                        val json = settings.savedSearchesJson
+                        val existing = editingSmart
+                        if (existing != null) {
+                            app.preferences.setSavedSearchesJson(
+                                SavedSearches.update(
+                                    json,
+                                    existing.copy(
+                                        name = smartName.trim().ifBlank { smartQuery.trim() },
+                                        query = smartQuery.trim(),
+                                        icon = smartIcon,
+                                        color = smartColorFor(smartIcon),
+                                        pinned = smartPinned
+                                    )
+                                )
+                            )
+                        } else {
+                            val added = SavedSearches.add(json, smartName, smartQuery)
+                            val created = SavedSearches.parse(added).firstOrNull {
+                                it.query.equals(smartQuery.trim(), ignoreCase = true)
+                            }
+                            app.preferences.setSavedSearchesJson(
+                                if (created != null) {
+                                    SavedSearches.update(
+                                        added,
+                                        created.copy(
+                                            icon = smartIcon,
+                                            color = smartColorFor(smartIcon),
+                                            pinned = smartPinned
+                                        )
+                                    )
+                                } else {
+                                    added
+                                }
+                            )
+                        }
                         smartName = ""
                         smartQuery = ""
+                        editingSmart = null
                         showSmartFolder = false
                     }
                 ) { Text("Save") }
@@ -234,6 +330,7 @@ private fun SectionLabel(text: String) {
 private fun SmartFolderRow(
     search: SavedSearch,
     onOpen: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     LockerCard(
@@ -244,8 +341,8 @@ private fun SmartFolderRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconTile(
-                icon = Icons.Rounded.Search,
-                tint = BrandBlue,
+                icon = smartIconFor(search.icon),
+                tint = Color(search.color),
                 size = 40.dp,
                 iconSize = 20.dp
             )
@@ -266,6 +363,14 @@ private fun SmartFolderRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Rounded.Edit,
+                    contentDescription = "Edit smart folder",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Rounded.Close,
@@ -276,6 +381,20 @@ private fun SmartFolderRow(
             }
         }
     }
+}
+
+private fun smartIconFor(icon: String) = when (icon) {
+    "star" -> Icons.Rounded.Star
+    "lock" -> Icons.Rounded.Lock
+    "folder" -> Icons.Rounded.Folder
+    else -> Icons.Rounded.Search
+}
+
+private fun smartColorFor(icon: String): Long = when (icon) {
+    "star" -> 0xFFFFB968
+    "lock" -> 0xFFFF8F7A
+    "folder" -> 0xFF57D9A3
+    else -> 0xFF5B9CFF
 }
 
 @Composable

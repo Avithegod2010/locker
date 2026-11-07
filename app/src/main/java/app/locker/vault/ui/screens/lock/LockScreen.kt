@@ -105,8 +105,10 @@ fun LockScreen() {
     var biometricPromptShown by remember { mutableStateOf(false) }
     val shake = remember { Animatable(0f) }
 
-    val canUseBiometrics = remember {
-        settings.biometricEnabled && app.biometricKeyStore.canAuthenticate()
+    val canUseBiometrics = remember(settings.biometricEnabled) {
+        settings.biometricEnabled &&
+            app.biometricKeyStore.canAuthenticate() &&
+            app.session.hasBiometricPayload()
     }
 
     fun shakeError(message: String) {
@@ -134,7 +136,7 @@ fun LockScreen() {
         loading = true
         error = null
         scope.launch {
-            when (val result = app.session.unlockWithPassword(password.toCharArray())) {
+            when (val result = app.unlockWithPassword(password.toCharArray())) {
                 is UnlockResult.Success -> password = ""
                 is UnlockResult.DuressUnlocked -> password = ""
                 is UnlockResult.WrongCredentials -> {

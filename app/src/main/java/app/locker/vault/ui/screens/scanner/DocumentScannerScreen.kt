@@ -14,6 +14,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,6 +95,7 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
         )
     }
     var pages by remember { mutableStateOf<List<ScanPage>>(emptyList()) }
+    var pageMenu by remember { mutableStateOf<ScanPage?>(null) }
     var capturing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var cameraReady by remember { mutableStateOf(false) }
@@ -365,6 +368,7 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
                                 modifier = Modifier
                                     .size(width = 64.dp, height = 82.dp)
                                     .clip(RoundedCornerShape(10.dp))
+                                    .clickable { pageMenu = page }
                             )
                             Surface(
                                 onClick = {
@@ -454,5 +458,61 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    pageMenu?.let { page ->
+        val index = pages.indexOf(page)
+        AlertDialog(
+            onDismissRequest = { pageMenu = null },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Page ${index + 1}") },
+            text = {
+                Text(
+                    "Move this page within the document, or remove it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Row {
+                    TextButton(
+                        enabled = index > 0,
+                        onClick = {
+                            if (index > 0) {
+                                pages = pages.toMutableList().apply {
+                                    add(index - 1, removeAt(index))
+                                }
+                            }
+                            pageMenu = null
+                        }
+                    ) { Text("Move left") }
+                    TextButton(
+                        enabled = index in 0 until pages.lastIndex,
+                        onClick = {
+                            if (index in 0 until pages.lastIndex) {
+                                pages = pages.toMutableList().apply {
+                                    add(index + 1, removeAt(index))
+                                }
+                            }
+                            pageMenu = null
+                        }
+                    ) { Text("Move right") }
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        page.file.delete()
+                        if (!page.thumb.isRecycled) page.thumb.recycle()
+                        pages = pages.filterNot { it === page }
+                        pageMenu = null
+                    }) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                    TextButton(onClick = { pageMenu = null }) { Text("Close") }
+                }
+            }
+        )
     }
 }

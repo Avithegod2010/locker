@@ -147,6 +147,7 @@ fun HomeScreen(navController: NavController) {
     val savedSearches = remember(settings.savedSearchesJson) {
         SavedSearches.parse(settings.savedSearchesJson)
     }
+    val homeSearches = savedSearches.filter { it.pinned }
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val snackbarHostState = remember { SnackbarHostState() }
@@ -411,13 +412,13 @@ fun HomeScreen(navController: NavController) {
                     )
                     Spacer(Modifier.height(8.dp))
 
-                    if (state.filter.query.isBlank() && savedSearches.isNotEmpty()) {
+                    if (state.filter.query.isBlank() && homeSearches.isNotEmpty()) {
                         LazyRow(
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(savedSearches, key = { it.id }) { search ->
+                            items(homeSearches, key = { it.id }) { search ->
                                 Surface(
                                     onClick = { viewModel.setQuery(search.query) },
                                     shape = CircleShape,

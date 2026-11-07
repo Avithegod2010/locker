@@ -26,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -80,6 +82,9 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
     }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recording by remember { mutableStateOf(false) }
+    var paused by remember { mutableStateOf(false) }
+    var accumulatedMs by remember { mutableStateOf(0L) }
+    var segmentStartMs by remember { mutableStateOf(0L) }
     var activeFile by remember { mutableStateOf<File?>(null) }
     var elapsedMs by remember { mutableStateOf(0L) }
     var peaks by remember { mutableStateOf<List<Float>>(emptyList()) }
@@ -129,6 +134,9 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
             pendingFile = null
             peaks = emptyList()
             elapsedMs = 0
+            accumulatedMs = 0
+            segmentStartMs = System.currentTimeMillis()
+            paused = false
             recording = true
         } catch (t: Throwable) {
             file.delete()
@@ -139,6 +147,7 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
     fun stopRecording() {
         if (!recording) return
         recording = false
+        paused = false
         val current = recorder
         recorder = null
         val file = try {
@@ -158,15 +167,30 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
         pendingFile = file
     }
 
-    LaunchedEffect(recording) {
-        val startedAt = System.currentTimeMillis()
-        while (recording) {
-            elapsedMs = System.currentTimeMillis() - startedAt
+    LaunchedEffect(recording, paused) {
+        if (!recording || paused) return@LaunchedEffect
+        while (recording && !paused) {
+            elapsedMs = accumulatedMs + (System.currentTimeMillis() - segmentStartMs)
             val amplitude = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
             val normalized = (amplitude / 32767f).coerceIn(0f, 1f)
             peaks = (peaks + normalized).takeLast(220)
             delay(90)
         }
+    }
+
+    fun pauseRecording() {
+        if (!recording || paused) return
+        runCatching { recorder?.pause() }
+        accumulatedMs += System.currentTimeMillis() - segmentStartMs
+        elapsedMs = accumulatedMs
+        paused = true
+    }
+
+    fun resumeRecording() {
+        if (!recording || !paused) return
+        runCatching { recorder?.resume() }
+        segmentStartMs = System.currentTimeMillis()
+        paused = false
     }
 
     fun discard() {
@@ -292,7 +316,8 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
                 when {
                     error != null -> error ?: ""
                     pendingFile != null -> "Recording ready — save it to your vault or discard it."
-                    recording -> "Recording… tap stop when you are done."
+                    recording && paused -> "Paused — tap play beside the stop button to resume."
+                    recording -> "Recording… tap the pause button for a break, stop when done."
                     else -> "Tap the microphone to start recording."
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -319,6 +344,24 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.width(16.dp))
+            }
+            if (recording && !saving) {
+                Surface(
+                    onClick = { if (paused) resumeRecording() else pauseRecording() },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(58.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                            contentDescription = if (paused) "Resume recording" else "Pause recording",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(18.dp))
             }
             Surface(
                 onClick = {

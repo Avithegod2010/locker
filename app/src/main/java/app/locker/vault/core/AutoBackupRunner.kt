@@ -40,8 +40,19 @@ class AutoBackupRunner(
                 ".locker"
             val target = tree.createFile("application/octet-stream", name)
                 ?: return@withContext
+            val verifyPassword = password.copyOf()
             val result = backupManager.createBackup(target.uri, password)
             if (result.isFailure) {
+                verifyPassword.fill('\u0000')
+                target.delete()
+                return@withContext
+            }
+            // Restore drill: read the archive back before trusting it.
+            val verified = runCatching {
+                backupManager.inspect(target.uri, verifyPassword)
+            }.getOrNull()
+            verifyPassword.fill('\u0000')
+            if (verified == null || verified.isFailure) {
                 target.delete()
                 return@withContext
             }

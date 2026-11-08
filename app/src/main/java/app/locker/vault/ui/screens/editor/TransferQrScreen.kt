@@ -18,10 +18,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -59,16 +61,31 @@ fun TransferQrScreen(itemId: String, onBack: () -> Unit) {
     var passphrase by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var qr by remember { mutableStateOf<Bitmap?>(null) }
+    var payload by rememberSaveable { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+
+    LaunchedEffect(payload) {
+        if (qr == null) {
+            payload?.let { qr = encodeQrCode(it) }
+        }
+    }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png")
     ) { uri: Uri? ->
         app.session.endExternalActivity()
-        val bitmap = qr ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            val bitmap = qr ?: payload?.let { encodeQrCode(it) }
+            if (bitmap == null) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Could not prepare the QR image",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
             val ok = withContext(Dispatchers.IO) {
                 runCatching {
                     context.contentResolver.openOutputStream(uri)?.use { output ->
@@ -95,14 +112,16 @@ fun TransferQrScreen(itemId: String, onBack: () -> Unit) {
                 scope.launch {
                     val result = withContext(Dispatchers.Default) {
                         runCatching {
-                            val payload = TransferCodec.encode(current, passphrase.toCharArray())
-                            encodeQrCode(payload)
-                                ?: error("Could not render the QR code")
+                            val encoded = TransferCodec.encode(current, passphrase.toCharArray())
+                            encoded to (encodeQrCode(encoded)
+                                ?: error("Could not render the QR code"))
                         }
                     }
                     busy = false
-                    result.onSuccess { qr = it }
-                        .onFailure { error = it.message ?: "Could not create the QR code" }
+                    result.onSuccess { (encoded, bitmap) ->
+                        payload = encoded
+                        qr = bitmap
+                    }.onFailure { error = it.message ?: "Could not create the QR code" }
                 }
             }
         }

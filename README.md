@@ -185,7 +185,14 @@ The signed release build (version 1.6.0; R8 disabled because the build host hit 
 
 Unit tests pass for AES-256-GCM round-trip/tamper rejection, Argon2id determinism, SHA-256, RFC 6238 TOTP vectors, numeric recovery codes (including legacy Base32 keys), Shamir 2-of-3 recovery shares, CSV/Bitwarden/ZIP import parsing, Google Authenticator migration QR parsing, item-history retention, password-generator guarantees, the calculator engine, and the predictable-password detector.
 
-Version **1.8.0** adds recovery shares, a hidden vault space, tamper detection, richer decoy seeding, and encrypted QR transfer. It is code-complete with 61 passing unit tests and a signed release build; on-device verification of those new security flows is still pending.
+Version **1.8.0** was installed over 1.6.0 and verified on the same phone:
+
+- recovery shares generated on-device; shares 1 + 2 reconstructed the original key exactly
+- hidden vault opened with its own password, kept a note separate from the real vault, and survived an independent password change plus a force-stop
+- decoy opened with the richer backdated content; its changed password and the real password continued to open their respective vaults
+- encrypted QR transfer exported a note as a PNG, then imported that image with its passphrase and created a matching item
+- tamper detection produced no warning after clean locks or force-stops; the warning path itself was not adversarially simulated
+- the temporary real vault, hidden vault, and decoy were erased afterwards, leaving the app at onboarding
 
 Version 1.3.x had previously been exercised on the same device for the calculator disguise, in-app video recording, voice memos, document scanning, password import, smart folders, and the icon set. Version 1.2.0 was exercised for the numeric recovery code, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 

@@ -25,20 +25,35 @@ class TamperGuard(context: android.content.Context, databaseName: String) {
             .putString(KEY_HASH, hash)
             .putLong(KEY_SIZE, file.length())
             .putLong(KEY_RECORDED_AT, System.currentTimeMillis())
+            .putBoolean(KEY_CLEAN, true)
             .apply()
     }
 
-    /** Returns true when the database matches the last fingerprint, or on first use. */
+    /**
+     * Returns true when the database matches the last fingerprint, or when the previous
+     * session did not end in a clean lock (a force-stop must not look like tampering).
+     */
     fun verify(db: VaultDb): Boolean {
+        val wasClean = prefs.getBoolean(KEY_CLEAN, false)
+        if (!wasClean) {
+            record(db)
+            prefs.edit().putBoolean(KEY_CLEAN, false).apply()
+            return true
+        }
         db.checkpoint()
         val file = db.databaseFile()
-        if (!file.exists()) return true
+        if (!file.exists()) {
+            prefs.edit().putBoolean(KEY_CLEAN, false).apply()
+            return true
+        }
         val expected = prefs.getString(KEY_HASH, null)
         if (expected.isNullOrBlank()) {
             record(db)
+            prefs.edit().putBoolean(KEY_CLEAN, false).apply()
             return true
         }
         val actual = hash(file) ?: return false
+        prefs.edit().putBoolean(KEY_CLEAN, false).apply()
         return actual == expected
     }
 
@@ -59,5 +74,6 @@ class TamperGuard(context: android.content.Context, databaseName: String) {
         const val KEY_HASH = "db_sha256"
         const val KEY_SIZE = "db_size"
         const val KEY_RECORDED_AT = "recorded_at"
+        const val KEY_CLEAN = "clean_lock"
     }
 }

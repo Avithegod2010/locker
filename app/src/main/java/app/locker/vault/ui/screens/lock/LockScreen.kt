@@ -251,6 +251,20 @@ fun LockScreen() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+            if (settings.trialVault && !app.isDecoyActive && !app.isHiddenActive) {
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f)
+                ) {
+                    Text(
+                        "Temporary vault · default password",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 buildString {

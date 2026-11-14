@@ -57,8 +57,11 @@ class TamperGuard(context: android.content.Context, databaseName: String) {
         return actual == expected
     }
 
-    private fun hash(file: File): String? = runCatching {
-        val digest = MessageDigest.getInstance("SHA-256")
+    fun reset() {
+        prefs.edit().clear().apply()
+    }
+
+    private fun hash(file: File): String? = runCatching {        val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
             val buffer = ByteArray(64 * 1024)
             while (true) {

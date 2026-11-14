@@ -2,6 +2,13 @@
 
 All notable changes to Locker are recorded here. Versions follow the release tags on GitHub.
 
+## 1.9.0
+
+- **Temporary trial vault** — a first-run shortcut creates a vault with the public default password `Qwerty1234567`, skipping password and recovery setup for a quick look.
+- **Persistent trial reminders** — a home banner, lock-screen badge, drawer notice, and Security warning stay visible until a real password is set.
+- **One-tap conversion** — changing the vault password clears the trial state and keeps every item.
+- **Generated vault password** — normal onboarding can generate, reveal, and copy a strong password before creating the vault.
+
 ## 1.8.0
 
 - **Recovery shares** — split the numeric recovery code into three paper shares with a 2-of-3 threshold; any two reconstruct it.

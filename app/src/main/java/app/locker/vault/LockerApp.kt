@@ -112,6 +112,7 @@ class VaultSpace(
         repository.wipeAllData()
         keyMaterialStore.wipe()
         fileStore.wipeAll()
+        tamperGuard.reset()
         session.resetToSetup()
     }
 
@@ -119,6 +120,7 @@ class VaultSpace(
         repository.wipeAllData()
         keyMaterialStore.wipe()
         fileStore.wipeAll()
+        tamperGuard.reset()
     }
 
     fun lockIfUnlocked() {

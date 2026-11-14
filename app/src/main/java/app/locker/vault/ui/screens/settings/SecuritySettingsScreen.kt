@@ -234,6 +234,43 @@ fun SecuritySettingsScreen(
             }
         }
 
+        if (settings.trialVault && !app.isDecoyActive && !app.isHiddenActive) {
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = BrandAmber.copy(alpha = 0.12f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BrandAmber.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "Temporary vault",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "The password is still the public default Qwerty1234567. Set your own before storing real secrets. Your items stay the same.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        onClick = { showChangePassword = true },
+                        shape = RoundedCornerShape(14.dp),
+                        color = BrandAmber.copy(alpha = 0.18f)
+                    ) {
+                        Text(
+                            "Set a permanent password",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = BrandAmber,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         SettingsSectionTitle("Access")
         SettingsGroup {
             SettingRow(
@@ -1123,6 +1160,9 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
                         loading = false
                         when (result) {
                             is UnlockResult.Success -> {
+                                if (!app.isDecoyActive && !app.isHiddenActive) {
+                                    app.preferences.setTrialVault(false)
+                                }
                                 android.widget.Toast.makeText(
                                     context,
                                     "Password changed",

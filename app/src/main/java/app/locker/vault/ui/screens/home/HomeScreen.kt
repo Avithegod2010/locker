@@ -290,6 +290,7 @@ fun HomeScreen(navController: NavController) {
                     profileEmail = state.profile.email,
                     itemCount = state.activeCount,
                     totalBytes = state.totalBytes,
+                    trialVault = settings.trialVault && !app.isDecoyActive && !app.isHiddenActive,
                     onClose = { closeDrawer() },
                     onSearch = {
                         scope.launch {
@@ -385,6 +386,12 @@ fun HomeScreen(navController: NavController) {
                     if (settings.tamperDetected) {
                         TamperWarningBanner(
                             onDismiss = { app.preferences.setTamperDetected(false) }
+                        )
+                    }
+
+                    if (settings.trialVault && !app.isDecoyActive && !app.isHiddenActive) {
+                        TrialVaultBanner(
+                            onSetPassword = { navController.navigate(Routes.SECURITY) }
                         )
                     }
 
@@ -1572,6 +1579,44 @@ private fun BulkTagDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+private fun TrialVaultBanner(onSetPassword: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = BrandAmber.copy(alpha = 0.16f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.Warning,
+                contentDescription = null,
+                tint = BrandAmber,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Temporary vault",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "Default password: Qwerty1234567. Set your own before storing real secrets.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+            TextButton(onClick = onSetPassword) { Text("Set password") }
+        }
+    }
 }
 
 @Composable

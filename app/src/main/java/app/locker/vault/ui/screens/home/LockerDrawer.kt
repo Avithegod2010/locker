@@ -68,6 +68,7 @@ fun DrawerContent(
     profileEmail: String,
     itemCount: Int,
     totalBytes: Long,
+    trialVault: Boolean,
     onClose: () -> Unit,
     onSearch: () -> Unit,
     onNavigate: (String) -> Unit,
@@ -179,6 +180,42 @@ fun DrawerContent(
             DrawerRow(Icons.Rounded.Info, "About", { onNavigate(Routes.ABOUT) })
         }
 
+        if (trialVault) {
+            Surface(
+                onClick = { onNavigate(Routes.SECURITY) },
+                shape = RoundedCornerShape(18.dp),
+                color = BrandAmber.copy(alpha = 0.16f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.Info,
+                        contentDescription = null,
+                        tint = BrandAmber,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "TEMPORARY VAULT",
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
+                            color = BrandAmber
+                        )
+                        Text(
+                            "Default password · tap to change",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(18.dp))
         LockerCard(
             onClick = onLock,
@@ -203,7 +240,7 @@ fun DrawerContent(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Locker 1.8.0 · No network permission",
+            "Locker 1.9.0 · No network permission",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
             modifier = Modifier

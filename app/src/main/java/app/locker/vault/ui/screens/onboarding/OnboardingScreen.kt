@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudOff
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,9 +85,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.R
+import app.locker.vault.core.PasswordGenerator
 import app.locker.vault.core.RecoveryCodeFormat
 import app.locker.vault.core.SessionManager
 import app.locker.vault.core.SessionState
+import app.locker.vault.core.TrialVault
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.BiometricPromptHelper
@@ -101,7 +105,31 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun OnboardingScreen() {
+    val app = LocalAppContainer.current
+    val scope = rememberCoroutineScope()
     var page by rememberSaveable { mutableIntStateOf(0) }
+    var showTrialConfirm by rememberSaveable { mutableStateOf(false) }
+    var trialLoading by remember { mutableStateOf(false) }
+    var trialError by remember { mutableStateOf<String?>(null) }
+
+    fun createTrialVault() {
+        if (trialLoading) return
+        trialLoading = true
+        trialError = null
+        scope.launch {
+            val result = app.session.createVault(TrialVault.DEFAULT_PASSWORD.toCharArray())
+            if (result is UnlockResult.Success) {
+                app.preferences.setTrialVault(true)
+                app.session.completeOnboarding()
+                showTrialConfirm = false
+            } else {
+                trialLoading = false
+                trialError = (result as? UnlockResult.Failure)?.message
+                    ?: "Could not create the temporary vault."
+            }
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         OnboardingBackdrop()
         AnimatedContent(
@@ -118,11 +146,67 @@ fun OnboardingScreen() {
             label = "onboarding"
         ) { index ->
             if (index == 0) {
-                WelcomePage(onContinue = { page = 1 })
+                WelcomePage(
+                    onContinue = { page = 1 },
+                    onTrial = {
+                        trialError = null
+                        showTrialConfirm = true
+                    }
+                )
             } else {
-                CreatePasswordPage(onBack = { page = 0 })
+                CreatePasswordPage(
+                    onBack = { page = 0 },
+                    onTrial = {
+                        trialError = null
+                        showTrialConfirm = true
+                    }
+                )
             }
         }
+    }
+
+    if (showTrialConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!trialLoading) showTrialConfirm = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            icon = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+            title = { Text("Try a temporary vault?") },
+            text = {
+                Column {
+                    Text(
+                        "Locker will create a vault with the default password ${TrialVault.DEFAULT_PASSWORD}. The recovery key is generated but not shown, and no real secrets should be stored until you set your own password.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "A reminder stays on the home screen and in Security. You can change the password anytime; your items stay the same.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (trialError != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            trialError ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { createTrialVault() }, enabled = !trialLoading) {
+                    Text(if (trialLoading) "Creating…" else "Create trial vault")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showTrialConfirm = false },
+                    enabled = !trialLoading
+                ) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -173,7 +257,7 @@ private fun OnboardingBackdrop() {
 }
 
 @Composable
-private fun WelcomePage(onContinue: () -> Unit) {
+private fun WelcomePage(onContinue: () -> Unit, onTrial: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -223,7 +307,15 @@ private fun WelcomePage(onContinue: () -> Unit) {
         )
         Spacer(Modifier.height(34.dp))
         PrimaryButton(text = "Create your vault", onClick = onContinue)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
+        TextButton(onClick = onTrial) {
+            Text(
+                "Just exploring? Try a temporary vault",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Text(
             "No internet permission · No tracking · No accounts",
             style = MaterialTheme.typography.bodySmall,
@@ -312,12 +404,14 @@ private fun FeatureRow(
 }
 
 @Composable
-private fun CreatePasswordPage(onBack: () -> Unit) {
+private fun CreatePasswordPage(onBack: () -> Unit, onTrial: () -> Unit) {
     val app = LocalAppContainer.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var reveal by rememberSaveable { mutableStateOf(false) }
+    var generated by rememberSaveable { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -332,6 +426,8 @@ private fun CreatePasswordPage(onBack: () -> Unit) {
             loading = false
             if (result is UnlockResult.Failure) {
                 error = result.message
+            } else {
+                app.preferences.setTrialVault(false)
             }
         }
     }
@@ -402,6 +498,62 @@ private fun CreatePasswordPage(onBack: () -> Unit) {
             visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
             isSensitive = true
         )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = {
+                    val value = PasswordGenerator.generate(app.preferences.settings.value)
+                    password = value
+                    confirm = value
+                    reveal = true
+                    generated = true
+                    error = null
+                }
+            ) {
+                Icon(
+                    Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.size(6.dp))
+                Text("Generate a strong password", color = MaterialTheme.colorScheme.primary)
+            }
+            if (generated) {
+                TextButton(onClick = {
+                    app.secureClipboard.copy(
+                        label = "Locker vault password",
+                        value = password,
+                        clearAfterSeconds = 120
+                    )
+                    android.widget.Toast.makeText(
+                        context,
+                        "Password copied — store it safely",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }) {
+                    Icon(
+                        Icons.Rounded.ContentCopy,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text("Copy", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (generated) {
+            Text(
+                "Generated password revealed above. Save it before creating the vault; Locker cannot recover it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = BrandAmber,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+        }
         Spacer(Modifier.height(16.dp))
         PasswordStrength(password)
         AnimatedVisibility(visible = confirm.isNotEmpty() && password != confirm) {
@@ -455,7 +607,15 @@ private fun CreatePasswordPage(onBack: () -> Unit) {
             enabled = valid,
             loading = loading
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = onTrial, enabled = !loading) {
+            Text(
+                "Skip setup and try a temporary vault",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center

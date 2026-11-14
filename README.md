@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.8.0-release.apk` from the latest release.
+1. Install `Locker-1.9.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -16,6 +16,8 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 ## Features
 
 - **Five vault types** — Secret (passwords), Note, Thing (real-world item), File, and Photo.
+- **Temporary trial vault** — on first run you can skip setup and open a vault with the public default password `Qwerty1234567`, then change it from Security. A persistent banner, lock-screen badge, drawer notice, and Security warning keep reminding you until a real password is set.
+- **Generated vault password** — during normal onboarding, generate a strong password, reveal it, and copy it before creating the vault.
 - **Strong encryption at rest** — every payload and file is authenticated and encrypted. Plaintext is never written to the vault database or vault file directory.
 - **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security. Onboarding and the Security dialog share the same five-group formatting, and you can save a printable one-page **recovery kit PDF** with the key and step-by-step instructions. **Recovery shares** split the code into three paper shares; any two reconstruct it.
 - **Hidden vault (travel mode)** — set a separate hidden password and enter it at the lock screen to open an independent encrypted vault with its own keys, database, files, recovery key, and items. The real vault stays locked and untouched.
@@ -142,7 +144,7 @@ Build it with:
 
 The release variant has `DEV_BUILD=false` and defaults screenshot protection to **on**.
 
-The **1.3.1 hotfix, 1.4.0, 1.4.1, 1.5.0, 1.6.0, and 1.8.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
+The **1.3.1 hotfix, 1.4.0, 1.4.1, 1.5.0, 1.6.0, 1.8.0, and 1.9.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
 
 ### One-command release
 
@@ -193,6 +195,14 @@ Version **1.8.0** was installed over 1.6.0 and verified on the same phone:
 - encrypted QR transfer exported a note as a PNG, then imported that image with its passphrase and created a matching item
 - tamper detection produced no warning after clean locks or force-stops; the warning path itself was not adversarially simulated
 - the temporary real vault, hidden vault, and decoy were erased afterwards, leaving the app at onboarding
+
+Version **1.9.0** was verified on the same phone:
+
+- created a trial vault from the welcome screen with the public default password
+- the home banner, lock-screen badge, drawer notice, and Security banner all showed the reminder
+- setting a permanent password cleared every reminder; the default password then failed and the new one unlocked the vault
+- generated a strong password during normal onboarding, revealed and copied it, created the vault, and unlocked it with the generated password
+- app data was cleared afterwards and the app left at the welcome screen
 
 Version 1.3.x had previously been exercised on the same device for the calculator disguise, in-app video recording, voice memos, document scanning, password import, smart folders, and the icon set. Version 1.2.0 was exercised for the numeric recovery code, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 

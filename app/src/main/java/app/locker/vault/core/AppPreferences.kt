@@ -55,6 +55,7 @@ data class AppSettings(
     val hiddenSalt: String = "",
     val hiddenVerifier: String = "",
     val hiddenFastVerifier: Boolean = false,
+    val trialVault: Boolean = false,
     val tamperDetected: Boolean = false,
     val legacyVideosMigrated: Boolean = false
 )
@@ -112,6 +113,7 @@ class AppPreferences(context: Context) {
         hiddenSalt = prefs.getString("hidden_salt", null).orEmpty(),
         hiddenVerifier = prefs.getString("hidden_verifier", null).orEmpty(),
         hiddenFastVerifier = prefs.getBoolean("hidden_fast_verifier", false),
+        trialVault = prefs.getBoolean("trial_vault", false),
         tamperDetected = prefs.getBoolean("tamper_detected", false),
         legacyVideosMigrated = prefs.getBoolean("legacy_videos_migrated", false)
     )
@@ -169,6 +171,9 @@ class AppPreferences(context: Context) {
 
     fun setTamperDetected(value: Boolean) =
         update { putBoolean("tamper_detected", value) }
+
+    fun setTrialVault(value: Boolean) =
+        update { putBoolean("trial_vault", value) }
 
     fun setLegacyVideosMigrated(value: Boolean) =
         update { putBoolean("legacy_videos_migrated", value) }

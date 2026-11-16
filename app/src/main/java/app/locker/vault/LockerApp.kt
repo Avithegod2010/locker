@@ -27,6 +27,7 @@ import app.locker.vault.core.TamperGuard
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.data.BackupManager
 import app.locker.vault.data.EncryptedFileStore
+import app.locker.vault.data.TrialContent
 import app.locker.vault.data.VaultDb
 import app.locker.vault.data.VaultRepository
 import app.locker.vault.data.VaultType
@@ -90,9 +91,24 @@ class VaultSpace(
         session = session
     )
 
+    /**
+     * Collection ids unlocked for this session only. Never persisted: locking the vault wipes
+     * the set, so reopening the app always starts with every locked collection sealed.
+     */
+    val unlockedCollections = MutableStateFlow<Set<String>>(emptySet())
+
+    fun unlockCollection(collectionId: String) {
+        unlockedCollections.value = unlockedCollections.value + collectionId
+    }
+
+    fun sealCollection(collectionId: String) {
+        unlockedCollections.value = unlockedCollections.value - collectionId
+    }
+
     init {
         session.onVaultCreated = { repository.seedDefaults() }
         session.onLocked = {
+            unlockedCollections.value = emptySet()
             repository.clearInMemory()
             ThumbnailCache.clear()
             secureClipboard.clear()
@@ -171,6 +187,18 @@ class AppContainer(context: Context) {
     val repository: VaultRepository get() = _activeSpace.value.repository
     val backupManager: BackupManager get() = _activeSpace.value.backupManager
     val autoBackup: AutoBackupRunner get() = _activeSpace.value.autoBackup
+
+    /** Session-scoped unlock set for locked collections; see [CollectionLocks]. */
+    val unlockedCollections: StateFlow<Set<String>>
+        get() = _activeSpace.value.unlockedCollections
+
+    fun unlockCollection(collectionId: String) {
+        _activeSpace.value.unlockCollection(collectionId)
+    }
+
+    fun sealCollection(collectionId: String) {
+        _activeSpace.value.sealCollection(collectionId)
+    }
 
     init {
         mainSpace.session.onWipeRequired = { wipeVault() }
@@ -512,6 +540,34 @@ class AppContainer(context: Context) {
         runCatching { mainSpace.fileStore.clearSensitiveCaches() }
         runCatching { decoySpace?.fileStore?.clearSensitiveCaches() }
         runCatching { hiddenSpace?.fileStore?.clearSensitiveCaches() }
+    }
+
+    /**
+     * Seed a just-created trial vault with clearly tagged sample items. The trial uses a public
+     * password, so the content is invented, backdated, and tagged [TrialContent.TAG].
+     */
+    suspend fun seedTrialContent() {
+        val repository = mainSpace.repository
+        repository.refresh()
+        if (repository.items.value.any { TrialContent.TAG in it.tags }) return
+        val day = 24 * 60 * 60 * 1000L
+        val now = System.currentTimeMillis()
+        TrialContent.samples.forEach { sample ->
+            val created = now - sample.daysAgo * day
+            repository.createTextItem(
+                type = sample.type,
+                title = sample.title,
+                body = sample.body,
+                username = sample.username,
+                password = sample.password,
+                location = sample.location,
+                website = sample.website,
+                fields = sample.fields,
+                tags = listOf(TrialContent.TAG),
+                createdAt = created,
+                updatedAt = created
+            )
+        }
     }
 
     /** Harmless, lived-in starter content for a freshly created decoy vault. */

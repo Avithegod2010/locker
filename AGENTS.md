@@ -18,11 +18,11 @@ Non-negotiable product constraints:
 
 ## Current state
 
-- **Latest release: 1.9.0** (versionCode 11).
-- Release: https://github.com/Avithegod2010/locker/releases/tag/v1.9.0
-- APK asset: `Locker-1.9.0-release.apk`, SHA-256 `100fb9cff69f8518a0f0d33df9b079883bdde201816ddc239baa5b772bfeb429`.
+- **Latest release: 1.10.0** (versionCode 12).
+- Previous: 1.9.0 (versionCode 11), release https://github.com/Avithegod2010/locker/releases/tag/v1.9.0
+- Release 1.9.0 APK asset: `Locker-1.9.0-release.apk`, SHA-256 `100fb9cff69f8518a0f0d33df9b079883bdde201816ddc239baa5b772bfeb429`.
 - Signing certificate SHA-256: `96fb04402dbea1109402e6755e1b1187f393d632f0835d4a790b0ad083420867`.
-- Main is at commit `7118aaf` (release 1.9.0). The old `security-1.8.0` branch is merged and can be ignored or deleted.
+- Main line: `46d61d7` was the last docs commit before the 1.10.0 work.
 - The app is left at the welcome/onboarding screen after the last verification run.
 
 ## Tech stack
@@ -112,6 +112,8 @@ app/src/main/java/app/locker/vault/
     Shamir.kt               GF(256) secret sharing
     TamperGuard.kt          database fingerprint on clean lock
     TrialVault.kt           public default password constant
+    TrialWindow.kt          7-day trial countdown (never destructive)
+    CollectionLocks.kt      per-collection lock inheritance and filtering
     TransferCodec.kt        encrypted text-item QR payload
     RecoveryKitPdf.kt       one-page recovery kit
     CrashReporter.kt        app-private crash log
@@ -154,6 +156,7 @@ Each space has its own `KeyMaterialStore`, `SessionManager`, `VaultRepository`, 
 
 ## Recently shipped
 
+- 1.10.0 — trial sample content and first-run tour, trial countdown plus explicit trial delete, per-collection locks enforced across every listing surface, autofill no longer offers unmatched secrets.
 - 1.9.0 — trial vault with default password, persistent trial reminders, one-tap conversion, generated onboarding password.
 - 1.8.0 — hidden vault, Shamir 2-of-3 recovery shares, tamper warning, richer decoy, static encrypted QR transfer for text items.
 - 1.6.0 — item templates, previous versions, per-item biometric gate, Bitwarden JSON/Dashlane/TOTP QR import, autofill matching, photo redaction, diagnostics.
@@ -161,9 +164,9 @@ Each space has its own `KeyMaterialStore`, `SessionManager`, `VaultRepository`, 
 
 ## Known limitations / deferred work
 
-- No 1.7.0 documents/media batch yet (scanner upgrades, PDF merge/split/compress/page redaction, OCR search inside PDFs, video export, voice-memo skip-silence).
-- Per-collection locks are not implemented.
-- Autofill lacks inline suggestions and per-fill biometric; protected items are excluded from autofill.
+- No documents/media batch yet (scanner upgrades, PDF merge/split/compress/page redaction, OCR search inside PDFs, video export, voice-memo skip-silence). The old "1.7.0" label is retired; the batch is planned as 1.11.0.
+- Per-collection locks are enforced in the UI layer, not cryptographically: items in a locked collection are filtered from lists, search, autofill, archive, trash, health, tags, and the widget until unlocked for the session. Anyone who can read the SQLite file still needs the master key, but the lock adds no second key.
+- Autofill lacks inline suggestions and per-fill biometric; protected items and items in locked collections are excluded from autofill, and no dataset is offered when nothing matches.
 - Hidden vault is a separate space, not a per-collection flag; items cannot be moved between spaces.
 - QR transfer is static and text-item-only; animated/whole-vault transfer is not implemented.
 - Tamper detection is best-effort and does not resist an attacker who can rewrite app-private preferences.
@@ -184,6 +187,6 @@ Each space has its own `KeyMaterialStore`, `SessionManager`, `VaultRepository`, 
 
 The user has a roadmap of larger items and expects an agent to **ask permission before starting**:
 
-- Quick wins: trial demo content/tour, trial expiry/auto-cleanup, README screenshots/GIFs, monochrome icon, Obtainium/signing docs, backup restore preview.
-- Product depth: per-collection locks, autofill polish, documents/media 1.7.0, WorkManager backup scheduling, decoy editor, tablet/accessibility.
+- Quick wins: README screenshots/GIFs, monochrome icon, Obtainium/signing docs, backup restore preview/diff.
+- Product depth: autofill polish (inline suggestions, per-fill biometric), documents/media batch (1.11.0), WorkManager backup scheduling, decoy editor, tablet/accessibility.
 - Big bets: passkeys, animated/whole-vault QR, hidden collection refinement, SQLCipher, vault-key Shamir shares.

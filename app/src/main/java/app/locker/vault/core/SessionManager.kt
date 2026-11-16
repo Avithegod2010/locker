@@ -174,6 +174,22 @@ class SessionManager(
         }
     }
 
+    /**
+     * Verifies the vault password without changing session state or touching the failed-attempt
+     * counter. Used by per-collection locks on devices without an enrolled biometric.
+     */
+    suspend fun verifyPasswordQuiet(password: CharArray): Boolean = withContext(Dispatchers.Default) {
+        try {
+            val master = keyMaterialStore.unwrapWithPassword(password) ?: return@withContext false
+            Crypto.wipe(master)
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
     suspend fun unlockWithRecovery(input: String): UnlockResult = withContext(Dispatchers.Default) {        val epoch = lockEpoch
         try {
             val unwrapped = keyMaterialStore.unwrapWithRecovery(input)

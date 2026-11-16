@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -200,6 +201,7 @@ fun NewCollectionDialog(
         mutableStateOf(existing?.let { Color(it.color) } ?: collectionColors.first())
     }
     var icon by remember { mutableStateOf(existing?.icon ?: "folder") }
+    var requireLock by remember { mutableStateOf(existing?.requireLock ?: false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -292,6 +294,38 @@ fun NewCollectionDialog(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+                Spacer(Modifier.height(18.dp))
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Require unlock",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Hide these items until you confirm with biometrics or your password",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(checked = requireLock, onCheckedChange = { requireLock = it })
+                    }
+                }
             }
         },
         confirmButton = {
@@ -314,11 +348,17 @@ fun NewCollectionDialog(
                     scope.launch {
                         val colorLong = color.toArgb().toLong() and 0xFFFFFFFFL
                         val result = if (existing == null) {
-                            app.repository.addCollection(name, colorLong, icon, parentId)
-                                .map { it.id }
+                            app.repository.addCollection(
+                                name, colorLong, icon, parentId, requireLock
+                            ).map { it.id }
                         } else {
                             app.repository.updateCollection(
-                                existing.copy(name = name.trim(), color = colorLong, icon = icon)
+                                existing.copy(
+                                    name = name.trim(),
+                                    color = colorLong,
+                                    icon = icon,
+                                    requireLock = requireLock
+                                )
                             ).map { existing.id }
                         }
                         result

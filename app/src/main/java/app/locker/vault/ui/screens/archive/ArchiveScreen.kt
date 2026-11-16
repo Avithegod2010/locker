@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.BackTopBar
 import app.locker.vault.ui.components.EmptyState
@@ -42,7 +43,10 @@ import kotlinx.coroutines.launch
 fun ArchiveScreen(onBack: () -> Unit) {
     val app = LocalAppContainer.current
     val scope = rememberCoroutineScope()
-    val items by app.repository.items.collectAsStateWithLifecycle()
+    val itemsRaw by app.repository.items.collectAsStateWithLifecycle()
+    val collections by app.repository.collections.collectAsStateWithLifecycle()
+    val unlocked by app.unlockedCollections.collectAsStateWithLifecycle()
+    val items = CollectionLocks.visibleItems(itemsRaw, collections, unlocked)
     val archived = items.filter { it.archivedAt != null && it.deletedAt == null }
         .sortedByDescending { it.archivedAt }
 

@@ -605,13 +605,16 @@ class VaultRepository(
         name: String,
         color: Long,
         icon: String,
-        parentId: String = ""
+        parentId: String = "",
+        requireLock: Boolean = false
     ): Result<VaultCollection> = runCatching {
         withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
             try {
                 writeMutex.withLock {
-                    val collection = addCollectionLocked(key, name.trim(), color, icon, parentId)
+                    val collection = addCollectionLocked(
+                        key, name.trim(), color, icon, parentId, requireLock
+                    )
                     reload(key)
                     collection
                 }
@@ -674,6 +677,35 @@ class VaultRepository(
             }
         }
     }
+
+    /**
+     * Turns the per-collection lock on or off. The contents stay encrypted either way; the flag
+     * only controls whether the UI withholds them until the owner authenticates.
+     */
+    suspend fun setCollectionLock(collectionId: String, requireLock: Boolean): Result<Unit> =
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val key = session.requireMasterKey()
+                try {
+                    writeMutex.withLock {
+                        val target = _collections.value.firstOrNull { it.id == collectionId }
+                            ?: error("Collection no longer exists")
+                        db.insertCollection(
+                            collectionId,
+                            target.createdAt,
+                            Crypto.encrypt(
+                                key,
+                                encodeCollection(target.copy(requireLock = requireLock)),
+                                collectionAad(collectionId)
+                            )
+                        )
+                        reload(key)
+                    }
+                } finally {
+                    Crypto.wipe(key)
+                }
+            }
+        }
 
     suspend fun deleteCollection(collectionId: String): Result<Unit> = runCatching {
         withContext(Dispatchers.IO) {
@@ -981,14 +1013,16 @@ class VaultRepository(
         name: String,
         color: Long,
         icon: String,
-        parentId: String = ""
+        parentId: String = "",
+        requireLock: Boolean = false
     ): VaultCollection {
         val collection = VaultCollection(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Collection" },
             color = color,
             icon = icon,
-            parentId = parentId
+            parentId = parentId,
+            requireLock = requireLock
         )
         db.insertCollection(
             collection.id,
@@ -1131,6 +1165,7 @@ class VaultRepository(
                 color = json.optLong("color", 0xFF5B9CFF),
                 icon = json.optString("icon", "folder"),
                 parentId = json.optString("parentId", ""),
+                requireLock = json.optBoolean("requireLock", false),
                 createdAt = row.createdAt
             )
         } catch (_: Exception) {
@@ -1244,6 +1279,7 @@ class VaultRepository(
             .put("color", collection.color)
             .put("icon", collection.icon)
             .put("parentId", collection.parentId)
+            .put("requireLock", collection.requireLock)
             .toString()
             .toByteArray(Charsets.UTF_8)
 

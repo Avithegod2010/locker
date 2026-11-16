@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.core.Formatting
 import app.locker.vault.data.PasswordAudit
 import app.locker.vault.data.PasswordIssue
@@ -49,7 +50,10 @@ fun PasswordHealthScreen(
     onOpenItem: (VaultItem) -> Unit
 ) {
     val app = LocalAppContainer.current
-    val items by app.repository.items.collectAsStateWithLifecycle()
+    val itemsRaw by app.repository.items.collectAsStateWithLifecycle()
+    val collections by app.repository.collections.collectAsStateWithLifecycle()
+    val unlocked by app.unlockedCollections.collectAsStateWithLifecycle()
+    val items = CollectionLocks.visibleItems(itemsRaw, collections, unlocked)
     val active = remember(items) { items.filter { it.deletedAt == null } }
     val issues = remember(active) { PasswordAudit.audit(active) }
     val weak = remember(active) { PasswordAudit.weakCount(active) }

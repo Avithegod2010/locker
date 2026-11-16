@@ -1161,7 +1161,7 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
                         when (result) {
                             is UnlockResult.Success -> {
                                 if (!app.isDecoyActive && !app.isHiddenActive) {
-                                    app.preferences.setTrialVault(false)
+                                    app.preferences.clearTrialState()
                                 }
                                 android.widget.Toast.makeText(
                                     context,

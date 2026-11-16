@@ -59,10 +59,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.core.SavedSearch
 import app.locker.vault.core.SavedSearches
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.data.VaultCollection
 import app.locker.vault.data.VaultItem
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.BackTopBar
+import app.locker.vault.ui.components.CollectionUnlockDialog
 import app.locker.vault.ui.components.EmptyState
 import app.locker.vault.ui.components.IconTile
 import app.locker.vault.ui.components.ItemIcon
@@ -81,11 +83,13 @@ fun CollectionsScreen(
     val app = LocalAppContainer.current
     val collections by app.repository.collections.collectAsStateWithLifecycle()
     val items by app.repository.items.collectAsStateWithLifecycle()
+    val unlockedCollections by app.unlockedCollections.collectAsStateWithLifecycle()
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
     val savedSearches = remember(settings.savedSearchesJson) {
         SavedSearches.parse(settings.savedSearchesJson)
     }
     var showCreate by remember { mutableStateOf(false) }
+    var pendingUnlock by remember { mutableStateOf<VaultCollection?>(null) }
     var showSmartFolder by remember { mutableStateOf(false) }
     var editingSmart by remember { mutableStateOf<SavedSearch?>(null) }
     var smartName by remember { mutableStateOf("") }
@@ -171,10 +175,19 @@ fun CollectionsScreen(
                     }
                 }
                 items(roots, key = { it.id }) { collection ->
+                    val locked = CollectionLocks.isHidden(
+                        collection.id,
+                        collections,
+                        unlockedCollections
+                    )
                     CollectionCard(
                         collection = collection,
-                        count = active.count { collection.id in it.collectionIds },
-                        onClick = { onOpenCollection(collection.id) }
+                        count = if (locked) 0 else active.count { collection.id in it.collectionIds },
+                        locked = locked,
+                        onClick = {
+                            if (locked) pendingUnlock = collection
+                            else onOpenCollection(collection.id)
+                        }
                     )
                 }
             }
@@ -185,6 +198,18 @@ fun CollectionsScreen(
         NewCollectionDialog(
             onDismiss = { showCreate = false },
             onCreated = { showCreate = false }
+        )
+    }
+
+    pendingUnlock?.let { collection ->
+        CollectionUnlockDialog(
+            collectionName = collection.name,
+            onDismiss = { pendingUnlock = null },
+            onUnlocked = {
+                app.unlockCollection(collection.id)
+                pendingUnlock = null
+                onOpenCollection(collection.id)
+            }
         )
     }
 
@@ -401,6 +426,7 @@ private fun smartColorFor(icon: String): Long = when (icon) {
 private fun CollectionCard(
     collection: VaultCollection,
     count: Int,
+    locked: Boolean,
     onClick: () -> Unit
 ) {
     val accent = Color(collection.color)
@@ -410,12 +436,23 @@ private fun CollectionCard(
         contentPadding = PaddingValues(16.dp),
         modifier = Modifier.height(152.dp)
     ) {
-        IconTile(
-            icon = collectionIcon(collection.icon),
-            tint = accent,
-            size = 44.dp,
-            iconSize = 22.dp
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconTile(
+                icon = collectionIcon(collection.icon),
+                tint = accent,
+                size = 44.dp,
+                iconSize = 22.dp
+            )
+            Spacer(Modifier.weight(1f))
+            if (locked) {
+                Icon(
+                    Icons.Rounded.Lock,
+                    contentDescription = "Locked collection",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
         Spacer(Modifier.weight(1f))
         Text(
             collection.name,
@@ -426,7 +463,11 @@ private fun CollectionCard(
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            if (count == 1) "1 item" else "$count items",
+            when {
+                locked -> "Locked"
+                count == 1 -> "1 item"
+                else -> "$count items"
+            },
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -443,6 +484,7 @@ fun CollectionDetailScreen(
     val app = LocalAppContainer.current
     val collections by app.repository.collections.collectAsStateWithLifecycle()
     val items by app.repository.items.collectAsStateWithLifecycle()
+    val unlockedCollections by app.unlockedCollections.collectAsStateWithLifecycle()
     val collection = remember(collectionId, collections) {
         collections.firstOrNull { it.id == collectionId }
     }
@@ -450,6 +492,7 @@ fun CollectionDetailScreen(
     var showCreateChild by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showUnlockPrompt by remember { mutableStateOf(false) }
 
     if (collection == null) {
         Column(
@@ -468,11 +511,62 @@ fun CollectionDetailScreen(
         return
     }
 
+    // A sealed collection shows a lock panel instead of its contents, even when reached
+    // directly through a deep link or the back stack.
+    if (CollectionLocks.isHidden(collectionId, collections, unlockedCollections)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            BackTopBar(title = collection.name, onBack = onBack)
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(34.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "This collection is locked",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Unlock it to see its items. Locked collections are also hidden from " +
+                            "search, autofill, and the home screen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    TextButton(onClick = { showUnlockPrompt = true }) { Text("Unlock") }
+                }
+            }
+        }
+        if (showUnlockPrompt) {
+            CollectionUnlockDialog(
+                collectionName = collection.name,
+                onDismiss = { showUnlockPrompt = false },
+                onUnlocked = {
+                    app.unlockCollection(collectionId)
+                    showUnlockPrompt = false
+                }
+            )
+        }
+        return
+    }
+
     val children = collections.filter { it.parentId == collectionId }
     val matching = items
         .filter { it.deletedAt == null && collectionId in it.collectionIds }
         .sortedByDescending { it.updatedAt }
-
     Column(
         Modifier
             .fillMaxSize()
@@ -509,6 +603,15 @@ fun CollectionDetailScreen(
                         contentDescription = "Delete collection",
                         tint = MaterialTheme.colorScheme.error
                     )
+                }
+                if (collection.requireLock && collectionId in unlockedCollections) {
+                    IconButton(onClick = { app.sealCollection(collectionId) }) {
+                        Icon(
+                            Icons.Rounded.Lock,
+                            contentDescription = "Lock this collection again",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         )

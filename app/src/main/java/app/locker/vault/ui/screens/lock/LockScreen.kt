@@ -77,6 +77,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.locker.vault.BiometricAuthActivity
 import app.locker.vault.R
 import app.locker.vault.core.Formatting
+import app.locker.vault.core.TrialWindow
 import app.locker.vault.core.UnlockResult
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.LockerTextField
@@ -258,7 +259,7 @@ fun LockScreen() {
                     color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f)
                 ) {
                     Text(
-                        "Temporary vault · default password",
+                        "Temporary vault · ${TrialWindow.label(settings.trialStartedAt)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)

@@ -111,6 +111,12 @@ data class VaultCollection(
     val color: Long,
     val icon: String,
     val parentId: String = "",
+    /**
+     * When true the collection's contents are withheld until the owner unlocks it for this
+     * session. The flag lives inside the encrypted payload, so it never leaks a hint that a
+     * collection is protected. Absent in older payloads, which decode as unlocked.
+     */
+    val requireLock: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 

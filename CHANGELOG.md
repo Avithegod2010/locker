@@ -2,6 +2,14 @@
 
 All notable changes to Locker are recorded here. Versions follow the release tags on GitHub.
 
+## 1.10.0
+
+- **Trial vault starter content** — a trial vault now opens with six clearly tagged `Sample` items (a welcome note, an example login, a Wi-Fi entry, two real-world things, and a note about collections) so the first screen is not empty.
+- **First-run tour** — three short coach marks explain local-only encryption, the sample tag, and how to keep or delete the trial. Dismissing it is remembered.
+- **Trial countdown and explicit delete** — the trial banner and lock screen show the days left in a 7-day window. When it ends nothing is deleted: the vault keeps every item and asks you to set a password or delete it. **Delete trial** removes only that trial vault, behind a typed confirmation.
+- **Per-collection locks** — mark any collection as *Require unlock*. Its contents are withheld from the home list, search, smart folders, autofill, the widget, archive, trash, password health, and the tag manager until you unlock it with biometrics or your vault password. Unlocking lasts for the session only and is cleared on lock; locked collections show a lock badge and can be locked again from the collection screen.
+- **Autofill no longer suggests unrelated logins** — when nothing matched the current app or website, the service used to offer five arbitrary secrets. It now returns nothing instead, and never offers items from a locked collection.
+
 ## 1.9.0
 
 - **Temporary trial vault** — a first-run shortcut creates a vault with the public default password `Qwerty1234567`, skipping password and recovery setup for a quick look.

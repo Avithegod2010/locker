@@ -16,6 +16,7 @@ import android.widget.RemoteViews
 import app.locker.vault.LockerApp
 import app.locker.vault.R
 import app.locker.vault.core.SessionState
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.data.VaultItem
 import app.locker.vault.data.VaultType
 import kotlinx.coroutines.launch
@@ -47,15 +48,19 @@ class LockerAutofillService : AutofillService() {
             structure.getWindowNodeAt(0).rootViewNode
         } else null
         val domain = root?.webDomain.orEmpty()
+        val collections = container.repository.collections.value
+        val unlocked = container.unlockedCollections.value
         val all = container.repository.items.value.filter {
             it.type == VaultType.SECRET &&
                 it.deletedAt == null &&
                 it.archivedAt == null &&
-                !it.requireBiometric
+                !it.requireBiometric &&
+                // Items in a locked collection are never offered, even as a suggestion.
+                !CollectionLocks.isItemHidden(it, collections, unlocked)
         }
         val matching = all.filter { item ->
             matches(item, packageName, domain)
-        }.ifEmpty { all.take(5) }
+        }
 
         val datasets = matching.mapNotNull { item ->
             val presentation = RemoteViews(applicationContext.packageName, R.layout.autofill_dataset).apply {

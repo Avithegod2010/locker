@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Close
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,9 +87,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,13 +109,17 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.core.Formatting
 import app.locker.vault.core.SharedContent
 import app.locker.vault.core.SortMode
+import app.locker.vault.core.TrialWindow
+import app.locker.vault.data.VaultCollection
 import app.locker.vault.data.VaultItem
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.AnimatedCheck
+import app.locker.vault.ui.components.CollectionUnlockDialog
 import app.locker.vault.ui.components.DashedAddChip
 import app.locker.vault.ui.components.EmptyState
 import app.locker.vault.ui.components.FilterPill
@@ -142,6 +150,7 @@ fun HomeScreen(navController: NavController) {
     val viewModel: VaultViewModel = viewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
+    val unlockedCollections by app.unlockedCollections.collectAsStateWithLifecycle()
     val pendingShare by app.pendingShare.collectAsStateWithLifecycle()
     val pendingRoute by app.pendingRoute.collectAsStateWithLifecycle()
     val pendingSearch by app.pendingSearch.collectAsStateWithLifecycle()
@@ -168,6 +177,8 @@ fun HomeScreen(navController: NavController) {
     var bulkCollectionOpen by remember { mutableStateOf(false) }
     var bulkTagOpen by remember { mutableStateOf(false) }
     var bulkDeleteConfirm by remember { mutableStateOf(false) }
+    var trialDeleteOpen by remember { mutableStateOf(false) }
+    var pendingUnlockCollection by remember { mutableStateOf<VaultCollection?>(null) }
 
     val selectedItems = remember(selectedIds, state.allItems) {
         state.allItems.filter { it.id in selectedIds }
@@ -390,8 +401,33 @@ fun HomeScreen(navController: NavController) {
                     }
 
                     if (settings.trialVault && !app.isDecoyActive && !app.isHiddenActive) {
+                        val trialNow = remember { System.currentTimeMillis() }
                         TrialVaultBanner(
-                            onSetPassword = { navController.navigate(Routes.SECURITY) }
+                            label = TrialWindow.label(settings.trialStartedAt, now = trialNow),
+                            expired = TrialWindow.isExpired(
+                                settings.trialStartedAt,
+                                now = trialNow
+                            ),
+                            onSetPassword = { navController.navigate(Routes.SECURITY) },
+                            onDelete = { trialDeleteOpen = true }
+                        )
+                        if (trialDeleteOpen) {
+                            DeleteTrialVaultDialog(onDismiss = { trialDeleteOpen = false })
+                        }
+                        if (!settings.trialTourSeen) {
+                            TrialTourCard(onDone = { app.preferences.setTrialTourSeen(true) })
+                        }
+                    }
+
+                    pendingUnlockCollection?.let { collection ->
+                        CollectionUnlockDialog(
+                            collectionName = collection.name,
+                            onDismiss = { pendingUnlockCollection = null },
+                            onUnlocked = {
+                                app.unlockCollection(collection.id)
+                                viewModel.selectCollection(collection.id)
+                                pendingUnlockCollection = null
+                            }
                         )
                     }
 
@@ -419,9 +455,14 @@ fun HomeScreen(navController: NavController) {
                     Spacer(Modifier.height(5.dp))
                     FilterRow(
                         state = state,
+                        lockedIds = CollectionLocks.activeLockIds(
+                            state.collections,
+                            unlockedCollections
+                        ),
                         onTune = { showFilterSheet = true },
                         onFavorites = viewModel::toggleFavorites,
                         onCollection = viewModel::selectCollection,
+                        onLockedCollection = { pendingUnlockCollection = it },
                         onUncategorized = viewModel::selectUncategorized
                     )
                     Spacer(Modifier.height(8.dp))
@@ -740,9 +781,11 @@ fun HomeScreen(navController: NavController) {
 @Composable
 private fun FilterRow(
     state: VaultUiState,
+    lockedIds: Set<String>,
     onTune: () -> Unit,
     onFavorites: () -> Unit,
     onCollection: (String) -> Unit,
+    onLockedCollection: (VaultCollection) -> Unit,
     onUncategorized: () -> Unit
 ) {
     LazyRow(
@@ -783,10 +826,14 @@ private fun FilterRow(
             )
         }
         items(state.collections, key = { it.id }) { collection ->
+            val locked = collection.id in lockedIds
             FilterPill(
                 label = collection.name,
                 selected = state.filter.collectionId == collection.id,
-                onClick = { onCollection(collection.id) }
+                leadingIcon = if (locked) Icons.Rounded.Lock else null,
+                onClick = {
+                    if (locked) onLockedCollection(collection) else onCollection(collection.id)
+                }
             )
         }
         item {
@@ -1582,39 +1629,193 @@ private fun BulkTagDialog(
 }
 
 @Composable
-private fun TrialVaultBanner(onSetPassword: () -> Unit) {
+private fun TrialVaultBanner(
+    label: String,
+    expired: Boolean,
+    onSetPassword: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val accent = if (expired) MaterialTheme.colorScheme.error else BrandAmber
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = BrandAmber.copy(alpha = 0.16f),
+        color = accent.copy(alpha = 0.16f),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Rounded.Warning,
-                contentDescription = null,
-                tint = BrandAmber,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(9.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Temporary vault",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+        Column(modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 6.dp, end = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (expired) Icons.Rounded.Warning else Icons.Rounded.Info,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp)
                 )
+                Spacer(Modifier.width(9.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (expired) "Trial expired" else "Temporary vault",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        if (expired) {
+                            "This vault still has your items. Set a real password to keep it, or delete it."
+                        } else {
+                            "$label — default password: Qwerty1234567. Set your own before storing real secrets."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                }
+                TextButton(onClick = onSetPassword) { Text("Set password") }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    "Default password: Qwerty1234567. Set your own before storing real secrets.",
-                    style = MaterialTheme.typography.bodySmall,
+                    if (expired) "Days are up, nothing was deleted" else label,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 16.sp
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onDelete) {
+                    Text("Delete trial", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
+/** Deletes only the disposable trial vault; requires a typed confirmation. */
+@Composable
+private fun DeleteTrialVaultDialog(onDismiss: () -> Unit) {
+    val app = LocalAppContainer.current
+    var confirmation by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = { if (!deleting) onDismiss() },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(28.dp),
+        title = {
+            Text(
+                "Delete this trial vault?",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "This trial vault was created with a public password. Deleting it removes its " +
+                        "items, files, and keys permanently — there is no backup.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(14.dp))
+                LockerTextField(
+                    value = confirmation,
+                    onValueChange = { confirmation = it },
+                    placeholder = "Type DELETE to confirm",
+                    label = "Confirmation"
                 )
             }
-            TextButton(onClick = onSetPassword) { Text("Set password") }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = confirmation.trim() == "DELETE" && !deleting,
+                onClick = {
+                    deleting = true
+                    scope.launch {
+                        app.wipeVault()
+                        onDismiss()
+                    }
+                }
+            ) {
+                Text("Delete trial vault", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !deleting) {
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    )
+}
+
+/** Three short coach marks so a first-run trial user knows what they are looking at. */
+@Composable
+private fun TrialTourCard(onDone: () -> Unit) {
+    var step by rememberSaveable { mutableIntStateOf(0) }
+    val steps = listOf(
+        "Everything stays on this phone" to
+            "Items are encrypted before they touch the disk. Locker has no internet permission, " +
+            "no account, and no sync.",
+        "The samples are marked" to
+            "Every example item carries a Sample tag. Open one, edit it, or delete it — nothing " +
+            "here is real, and nothing leaves the vault.",
+        "Keep it or delete it" to
+            "Set your own password from Security to turn this into your permanent vault, or use " +
+            "Delete trial to remove it completely."
+    )
+    val last = step == steps.lastIndex
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = BrandBlue,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    steps[step].first,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "${step + 1}/${steps.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                steps[step].second,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 17.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDone) {
+                    Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.weight(1f))
+                if (step > 0) {
+                    TextButton(onClick = { step -= 1 }) { Text("Back") }
+                }
+                TextButton(
+                    onClick = { if (last) onDone() else step += 1 }
+                ) { Text(if (last) "Got it" else "Next") }
+            }
         }
     }
 }

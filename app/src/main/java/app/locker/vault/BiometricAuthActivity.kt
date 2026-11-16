@@ -65,8 +65,9 @@ class BiometricAuthActivity : FragmentActivity() {
             MODE_CONFIRM -> {
                 BiometricPromptHelper.confirm(
                     activity = this,
-                    title = "Confirm it's you",
-                    subtitle = "This item is protected by biometrics",
+                    title = intent.getStringExtra(EXTRA_TITLE) ?: "Confirm it's you",
+                    subtitle = intent.getStringExtra(EXTRA_SUBTITLE)
+                        ?: "This item is protected by biometrics",
                     onSuccess = { finishWith(true, null) },
                     onCancelled = { finishWith(false, "Cancelled") },
                     onFailure = { finishWith(false, it) }
@@ -90,6 +91,8 @@ class BiometricAuthActivity : FragmentActivity() {
     companion object {
         const val EXTRA_MODE = "mode"
         const val EXTRA_MESSAGE = "message"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_SUBTITLE = "subtitle"
         const val MODE_ENROLL = "enroll"
         const val MODE_UNLOCK = "unlock"
         const val MODE_CONFIRM = "confirm"

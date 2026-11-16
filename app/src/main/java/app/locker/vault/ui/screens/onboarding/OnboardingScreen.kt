@@ -119,7 +119,9 @@ fun OnboardingScreen() {
         scope.launch {
             val result = app.session.createVault(TrialVault.DEFAULT_PASSWORD.toCharArray())
             if (result is UnlockResult.Success) {
+                app.seedTrialContent()
                 app.preferences.setTrialVault(true)
+                app.preferences.startTrialClock()
                 app.session.completeOnboarding()
                 showTrialConfirm = false
             } else {
@@ -427,7 +429,7 @@ private fun CreatePasswordPage(onBack: () -> Unit, onTrial: () -> Unit) {
             if (result is UnlockResult.Failure) {
                 error = result.message
             } else {
-                app.preferences.setTrialVault(false)
+                app.preferences.clearTrialState()
             }
         }
     }

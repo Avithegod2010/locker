@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.9.0-release.apk` from the latest release.
+1. Install `Locker-1.10.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -16,7 +16,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 ## Features
 
 - **Five vault types** — Secret (passwords), Note, Thing (real-world item), File, and Photo.
-- **Temporary trial vault** — on first run you can skip setup and open a vault with the public default password `Qwerty1234567`, then change it from Security. A persistent banner, lock-screen badge, drawer notice, and Security warning keep reminding you until a real password is set.
+- **Temporary trial vault** — on first run you can skip setup and open a vault with the public default password `Qwerty1234567`, then change it from Security. A persistent banner, lock-screen badge, drawer notice, and Security warning keep reminding you until a real password is set. A trial now starts with six clearly tagged **Sample** items and a three-step tour, shows how many days are left in its 7-day window, and can be deleted on its own with a typed confirmation. When the window ends nothing is deleted: the vault keeps every item and asks you to set a password or delete it.
 - **Generated vault password** — during normal onboarding, generate a strong password, reveal it, and copy it before creating the vault.
 - **Strong encryption at rest** — every payload and file is authenticated and encrypted. Plaintext is never written to the vault database or vault file directory.
 - **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security. Onboarding and the Security dialog share the same five-group formatting, and you can save a printable one-page **recovery kit PDF** with the key and step-by-step instructions. **Recovery shares** split the code into three paper shares; any two reconstruct it.
@@ -45,6 +45,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 - **Daily automatic backups** — optional encrypted `.locker` snapshots into a folder you choose, at most once a day after a password unlock, rotating the last N archives. Every automatic snapshot is read back and verified before it replaces the previous one, and **Verify latest snapshot** runs a restore drill without touching the vault. Fully offline.
 - **Quick-capture widget actions** — the home-screen widget can open a new note or the camera, and lock the vault.
 - **Collections, tags, Important, and Archive** — group items, cut across collections with tags, bulk-select, and hide things without deleting them.
+- **Per-collection locks** — mark a collection as *Require unlock*. Its items are withheld from home, search, smart folders, autofill, archive, trash, password health, the tag manager, and the widget until you confirm with biometrics or your vault password. Unlocking lasts only for the current session, is cleared on lock, and can be undone with the lock button inside the collection. Child collections inherit the lock.
 - **Search and filters** — search across titles, usernames, notes, locations, filenames, OCR text, tags, custom fields, types, and collections; supports `type:`, `tag:`, `before:`, and `after:`.
 - **Share target and open-with** — send files, photos, videos, PDFs, or text to Locker from any app, or open supported files directly.
 - **Autofill** — fill saved logins in other apps while the vault is unlocked. Matching understands full URLs, subdomains, app packages, and common field hints; saving an autofilled password updates the matching login instead of creating a duplicate.
@@ -70,6 +71,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 | Hidden vault | A second independent vault space with its own keys, database, files, and recovery key, opened by its own password at the lock screen |
 | Recovery shares | Shamir 2-of-3 over GF(256) of the 25-digit recovery code; shares carry an index and checksum and are never stored by the app |
 | Tamper evidence | SHA-256 fingerprint of the encrypted database stored after a clean lock and compared on unlock |
+| Collection locks | A `requireLock` flag inside each collection's encrypted payload; unlocked ids live in memory only and are cleared when the vault locks |
 | QR transfer | AES-256-GCM under an Argon2id-derived one-time passphrase; the payload contains no plaintext |
 | Automatic backups | Encrypted `.locker` archives written to a user-picked SAF folder; the vault password copy used for the snapshot is held only for the length of the backup and wiped afterwards |
 | Launcher disguise | Activity aliases and `PackageManager` component states; the vault password is always required |
@@ -210,14 +212,14 @@ Version 1.3.x had previously been exercised on the same device for the calculato
 
 - Intentionally **local-only**; there is no cloud sync, account, or cross-device sharing.
 - No scheduled reminders and no Wear OS companion yet.
-- Collections support nesting, saved searches, icons, and Home pins; per-collection locks and smart rules beyond saved queries are not implemented.
+- Collections support nesting, saved searches, icons, Home pins, and per-collection locks; smart rules beyond saved queries are not implemented. A locked collection is withheld from lists and search until unlocked for the session, and child collections inherit the lock.
 - Passkeys, animated or whole-vault QR transfer, manual CSV column remapping, 1Password JSON, live-camera QR scanning, and tablet two-pane layouts are not implemented yet. QR transfer is a static image and limited to text items; TOTP QR import reads an image through the system picker.
 - The hidden vault is a separate encrypted space opened by its own lock-screen password, not a per-collection visibility flag. Items are not moved between the real and hidden spaces.
 - Tamper detection is best-effort: it catches a replaced or rolled-back `vault.db` unless an attacker can also rewrite app-private preferences.
 - Automatic backups are triggered on unlock (no WorkManager scheduling), run at most once a day, and only after a password unlock (not after a biometric-only unlock).
 - Password history and expiry dates are stored per item; there are no push notifications or reminders for upcoming expiries — they appear in **Password health** when you open the app.
 - The duress password opens a decoy vault; it does not erase the real vault. Deleting the duress password deletes the decoy only.
-- Autofill is designed for the unlocked vault and does not yet offer inline suggestions or a per-fill biometric prompt; items marked **Require biometrics** are excluded from autofill.
+- Autofill is designed for the unlocked vault and does not yet offer inline suggestions or a per-fill biometric prompt; items marked **Require biometrics** and items in a locked collection are excluded from autofill. When nothing matches the current app or site, no dataset is offered.
 - English UI only.
 - Legacy is an encrypted emergency-contact/notes page; it does not automatically transmit anything to contacts.
 

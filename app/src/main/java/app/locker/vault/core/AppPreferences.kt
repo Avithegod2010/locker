@@ -56,6 +56,10 @@ data class AppSettings(
     val hiddenVerifier: String = "",
     val hiddenFastVerifier: Boolean = false,
     val trialVault: Boolean = false,
+    /** Epoch millis when the trial vault was created; 0 when there is no trial. */
+    val trialStartedAt: Long = 0L,
+    /** True once the first-run tour inside a trial vault has been dismissed. */
+    val trialTourSeen: Boolean = false,
     val tamperDetected: Boolean = false,
     val legacyVideosMigrated: Boolean = false
 )
@@ -114,6 +118,8 @@ class AppPreferences(context: Context) {
         hiddenVerifier = prefs.getString("hidden_verifier", null).orEmpty(),
         hiddenFastVerifier = prefs.getBoolean("hidden_fast_verifier", false),
         trialVault = prefs.getBoolean("trial_vault", false),
+        trialStartedAt = prefs.getLong("trial_started_at", 0L),
+        trialTourSeen = prefs.getBoolean("trial_tour_seen", false),
         tamperDetected = prefs.getBoolean("tamper_detected", false),
         legacyVideosMigrated = prefs.getBoolean("legacy_videos_migrated", false)
     )
@@ -174,6 +180,23 @@ class AppPreferences(context: Context) {
 
     fun setTrialVault(value: Boolean) =
         update { putBoolean("trial_vault", value) }
+
+    /**
+     * Starts the trial countdown. Kept separate from [setTrialVault] so an older install that
+     * only has the boolean keeps working: a missing start time simply shows no countdown.
+     */
+    fun startTrialClock(startedAt: Long = System.currentTimeMillis()) =
+        update { putLong("trial_started_at", startedAt) }
+
+    fun setTrialTourSeen(value: Boolean) =
+        update { putBoolean("trial_tour_seen", value) }
+
+    /** Clears every trial flag once the vault has a real password. */
+    fun clearTrialState() = update {
+        putBoolean("trial_vault", false)
+        putLong("trial_started_at", 0L)
+        putBoolean("trial_tour_seen", false)
+    }
 
     fun setLegacyVideosMigrated(value: Boolean) =
         update { putBoolean("legacy_videos_migrated", value) }

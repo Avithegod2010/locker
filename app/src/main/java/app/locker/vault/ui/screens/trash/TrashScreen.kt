@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.core.Formatting
 import app.locker.vault.data.VaultItem
 import app.locker.vault.ui.LocalAppContainer
@@ -59,7 +60,10 @@ fun TrashScreen(onBack: () -> Unit) {
     val app = LocalAppContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val allItems by app.repository.items.collectAsStateWithLifecycle()
+    val allItemsRaw by app.repository.items.collectAsStateWithLifecycle()
+    val collections by app.repository.collections.collectAsStateWithLifecycle()
+    val unlocked by app.unlockedCollections.collectAsStateWithLifecycle()
+    val allItems = CollectionLocks.visibleItems(allItemsRaw, collections, unlocked)
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
     val trashed = allItems.filter { it.deletedAt != null }
         .sortedByDescending { it.deletedAt }

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.locker.vault.LockerApp
+import app.locker.vault.core.CollectionLocks
 import app.locker.vault.core.SortMode
 import app.locker.vault.core.ThemeMode
 import app.locker.vault.data.VaultCollection
@@ -65,17 +66,23 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     val uiState: StateFlow<VaultUiState> = combine(
         combine(repository.items, loaded) { items, isLoaded -> items to isLoaded },
-        repository.collections,
+        combine(repository.collections, container.unlockedCollections) { collections, unlocked ->
+            collections to unlocked
+        },
         filter,
         container.preferences.settings,
         repository.profile
-    ) { itemsAndLoaded, collections, activeFilter, settings, profile ->
+    ) { itemsAndLoaded, collectionsAndUnlocked, activeFilter, settings, profile ->
         val items = itemsAndLoaded.first
         val isLoaded = itemsAndLoaded.second
+        val collections = collectionsAndUnlocked.first
+        val unlocked = collectionsAndUnlocked.second
         val active = items.filter {
             it.deletedAt == null && it.archivedAt == null && it.parentId.isEmpty()
         }
-        val filtered = active.filter { item ->
+        // Locked collections are withheld from every home surface until unlocked this session.
+        val visible = CollectionLocks.visibleItems(active, collections, unlocked)
+        val filtered = visible.filter { item ->
             val collectionMatch = when {
                 activeFilter.collectionId != null -> activeFilter.collectionId in item.collectionIds
                 activeFilter.uncategorizedOnly -> item.collectionIds.isEmpty()
@@ -94,15 +101,15 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             SortMode.NAME -> filtered.sortedBy { it.title.lowercase() }
         }
         VaultUiState(
-            allItems = active,
+            allItems = visible,
             items = sorted,
             collections = collections,
             filter = activeFilter,
             sortMode = settings.sortMode,
             profile = profile,
-            activeCount = active.size,
-            totalBytes = active.sumOf { it.sizeBytes },
-            allTags = active.flatMap { it.tags }.distinct().sortedBy { it.lowercase() },
+            activeCount = visible.size,
+            totalBytes = visible.sumOf { it.sizeBytes },
+            allTags = visible.flatMap { it.tags }.distinct().sortedBy { it.lowercase() },
             loading = !isLoaded
         )
     }.stateIn(

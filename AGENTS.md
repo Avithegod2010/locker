@@ -96,7 +96,7 @@ Important automation notes:
 - `adb shell pm clear app.locker.vault` is acceptable only for disposable test data, never for a user vault.
 - Erase test data through Security → Danger zone when possible, or `pm clear` after verification.
 
-Device checks used so far: onboarding/recovery code, trial vault, hidden vault, decoy, recovery shares, imports, QR transfer, redaction, diagnostics, biometric gate, lock/auto-lock, PDF kit.
+Device checks used so far: onboarding/recovery code, trial vault (samples, tour, countdown, delete), hidden vault, decoy, recovery shares, imports, QR transfer, redaction, diagnostics, biometric gate, lock/auto-lock, PDF kit, per-collection locks, PDF text indexing and tools, skip-silence toggle.
 
 ## Architecture map
 

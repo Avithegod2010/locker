@@ -200,6 +200,17 @@ Version **1.8.0** was installed over 1.6.0 and verified on the same phone:
 - tamper detection produced no warning after clean locks or force-stops; the warning path itself was not adversarially simulated
 - the temporary real vault, hidden vault, and decoy were erased afterwards, leaving the app at onboarding
 
+Version **1.11.0** was installed over 1.9.0 (versionCode 13) and verified on the same phone:
+
+- creating a trial vault produced the six `Sample` items, the three-step tour, and a `7 days left` banner
+- the tour advanced and stayed dismissed; the lock screen showed `Temporary vault · 7 days left`
+- a collection created with **Require unlock** showed `Locked`; moving a login into it removed the item from Home
+- tapping its chip raised the biometric prompt with the collection name, and the password fallback unlocked it (`Private · 1 shown`)
+- force-stopping the app and unlocking again hid the item once more, confirming the unlock is session-only
+- importing a PDF produced an item with `Text searchable` already set, and **Compress** saved `sample (small)` as a second PDF while the original stayed untouched
+- the voice recorder showed the **Skip silence** toggle
+- the trial vault was then deleted through **Delete trial** with the typed confirmation, leaving the app at the welcome screen
+
 Version **1.9.0** was verified on the same phone:
 
 - created a trial vault from the welcome screen with the public default password

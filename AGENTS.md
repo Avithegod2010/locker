@@ -35,13 +35,17 @@ Non-negotiable product constraints:
 
 ## Build environment (Windows host)
 
-Use these environment variables for every build:
+Use these environment variables for every build (the toolchain now lives on C:;
+E: is kept only as a fallback, and `scripts/build-tests.ps1` detects both):
 
 ```powershell
-$env:JAVA_HOME='E:\Dev\jdk\jdk-17.0.20+8'
-$env:GRADLE_USER_HOME='E:\Dev\.gradle'
-$env:ANDROID_HOME='E:\Dev\android-sdk'
+$env:JAVA_HOME='C:\Dev\jdk\jdk-17.0.20+8'
+$env:GRADLE_USER_HOME='C:\Dev\.gradle'
+$env:ANDROID_HOME='C:\Dev\android-sdk'
 ```
+
+`C:\Dev\.gradle` holds the dependency cache; `E:\Dev\.gradle` is empty after the move, so
+pointing at it makes every build fail with "No cached version available".
 
 Release signing uses the git-ignored `keystore/` and `keystore.properties`.
 

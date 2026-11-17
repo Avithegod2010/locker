@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +52,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import app.locker.vault.data.MediaExport
 import app.locker.vault.data.Mp4Trimmer
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
@@ -148,6 +150,42 @@ fun VideoPlayerScreen(
     fun changeSpeed(value: Float) {
         speed = value
         player?.setPlaybackSpeed(value)
+    }
+
+    var exportingAudio by remember { mutableStateOf(false) }
+
+    fun saveAudioTrack() {
+        val current = item ?: return
+        val input = file ?: return
+        if (exportingAudio) return
+        exportingAudio = true
+        scope.launch {
+            val output = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
+            val ok = runCatching { MediaExport.extractAudio(input, output) }.getOrDefault(false)
+            if (!ok || !output.exists() || output.length() == 0L) {
+                output.delete()
+                exportingAudio = false
+                android.widget.Toast.makeText(
+                    context,
+                    "This video has no audio track to save",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            val imported = app.repository.importFile(
+                uri = Uri.fromFile(output),
+                type = VaultType.FILE,
+                title = MediaExport.audioFileName(current.title),
+                collectionIds = current.collectionIds
+            )
+            output.delete()
+            exportingAudio = false
+            android.widget.Toast.makeText(
+                context,
+                if (imported.isSuccess) "Audio saved to the vault" else "Could not save the audio",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     fun saveTrim() {
@@ -366,6 +404,37 @@ fun VideoPlayerScreen(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             "Trim",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+                Surface(
+                    onClick = { saveAudioTrack() },
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.45f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (exportingAudio) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 1.8.dp,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Rounded.Audiotrack,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Audio",
                             color = Color.White,
                             style = MaterialTheme.typography.labelMedium
                         )

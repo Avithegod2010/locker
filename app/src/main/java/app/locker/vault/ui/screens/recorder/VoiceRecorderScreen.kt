@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,6 +56,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import app.locker.vault.core.SilenceAction
+import app.locker.vault.core.SilenceGate
+import app.locker.vault.core.SilenceGateState
 import app.locker.vault.data.CustomField
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
@@ -91,6 +95,8 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
     var pendingFile by remember { mutableStateOf<File?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var skipSilence by remember { mutableStateOf(false) }
+    var silenceState by remember { mutableStateOf(SilenceGateState()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -137,6 +143,7 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
             accumulatedMs = 0
             segmentStartMs = System.currentTimeMillis()
             paused = false
+            silenceState = SilenceGate.reset()
             recording = true
         } catch (t: Throwable) {
             file.delete()
@@ -148,6 +155,7 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
         if (!recording) return
         recording = false
         paused = false
+        silenceState = SilenceGate.reset()
         val current = recorder
         recorder = null
         val file = try {
@@ -174,6 +182,19 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
             val amplitude = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
             val normalized = (amplitude / 32767f).coerceIn(0f, 1f)
             peaks = (peaks + normalized).takeLast(220)
+            if (skipSilence) {
+                val decision = SilenceGate.update(
+                    state = silenceState,
+                    amplitude = normalized,
+                    now = System.currentTimeMillis()
+                )
+                silenceState = decision.state
+                when (decision.action) {
+                    SilenceAction.PAUSE -> runCatching { recorder?.pause() }
+                    SilenceAction.RESUME -> runCatching { recorder?.resume() }
+                    SilenceAction.NONE -> Unit
+                }
+            }
             delay(90)
         }
     }
@@ -181,6 +202,7 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
     fun pauseRecording() {
         if (!recording || paused) return
         runCatching { recorder?.pause() }
+        silenceState = SilenceGate.reset()
         accumulatedMs += System.currentTimeMillis() - segmentStartMs
         elapsedMs = accumulatedMs
         paused = true
@@ -189,6 +211,7 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
     fun resumeRecording() {
         if (!recording || !paused) return
         runCatching { recorder?.resume() }
+        silenceState = SilenceGate.reset()
         segmentStartMs = System.currentTimeMillis()
         paused = false
     }
@@ -324,6 +347,39 @@ fun VoiceRecorderScreen(onBack: () -> Unit) {
                 color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Skip silence",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            if (recording) {
+                                "Quiet stretches are cut automatically while you record."
+                            } else {
+                                "Pause automatically during quiet stretches so memos stay short."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = skipSilence,
+                        enabled = !recording,
+                        onCheckedChange = { skipSilence = it }
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.weight(1f))

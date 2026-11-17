@@ -8,7 +8,7 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 
 ## Quick start
 
-1. Install `Locker-1.10.0-release.apk` from the latest release.
+1. Install `Locker-1.11.0-release.apk` from the latest release.
 2. Create a vault password (10+ characters) and save the numeric recovery code.
 3. Optionally enable biometrics and Autofill in **Security**.
 4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
@@ -36,9 +36,11 @@ Locker is inspired by the calm, card-based layout of Ente Locker, but it is deli
 - **Password-manager import** — offline import from Bitwarden (CSV and JSON), 1Password (CSV and .1pux), KeePass XML, LastPass, KeePassXC, Dashlane/ZIP CSV, Chrome/Edge, Firefox, Samsung Internet, and other CSV exports. You preview every row (with automatic duplicate detection) and choose what to import; folders that match an existing collection are filed there automatically, and TOTP secrets and notes come along. **Import TOTP QR** reads a single `otpauth://` link or a Google Authenticator migration QR from a screenshot or photo.
 - **Launcher disguise** — show the app as Calculator, Calendar, or Notes on the home screen. All three are usable: Calculator is a working calculator (enter the passcode and press `=`), Notes is a working notepad, and Calendar is a real month view — long-press the title in Notes or Calendar to enter the passcode. Your vault password is still required afterwards. Only one icon is shown at a time; if your launcher caches the old icon, use **Refresh launcher icon** in Security. Shortcuts and the home-screen widget follow the active alias.
 - **Duress password (non-destructive)** — an optional second password that opens a separate decoy vault with its own keys, database, and files. Your real vault stays encrypted and untouched, and your normal password still opens it. Resetting the duress password rebuilds the decoy with fresh example entries.
-- **In-app video recording** — the secure camera has Photo and Video modes, records MP4 with optional audio (microphone permission is requested on first video use), and saves the clip straight into the encrypted vault with no gallery copy. Videos get encrypted thumbnails, resume where you left off, remember playback speed, and can be trimmed in place with an automatic “(original)” copy kept in the vault.
-- **Voice memos** — record encrypted audio notes with a live waveform, pause and resume mid-recording, then play them back with a waveform scrubber and 0.5×–2× speed.
+- **In-app video recording** — the secure camera has Photo and Video modes, records MP4 with optional audio (microphone permission is requested on first video use), and saves the clip straight into the encrypted vault with no gallery copy. Videos get encrypted thumbnails, resume where you left off, remember playback speed, can be trimmed in place with an automatic “(original)” copy kept in the vault, and can export their audio track as an M4A vault item.
+- **Voice memos** — record encrypted audio notes with a live waveform, pause and resume mid-recording, optionally skip silence automatically, then play them back with a waveform scrubber and 0.5×–2× speed.
 - **Document scanner** — capture several pages, auto-trim the borders, reorder pages, and save one encrypted PDF straight into the vault.
+- **PDF tools** — extract a page range, merge two vault PDFs, compress, or redact a page. Redaction rebuilds the page with the covered text burned out, and every result is a new encrypted item while the original stays untouched. Output pages are raster images, so PDF tools trade selectable text for guaranteed removal.
+- **PDF text search** — documents are indexed on-device at import, and the viewer can index an older or image-only PDF on demand. The recognised text is stored encrypted, so search finds documents by their contents.
 - **Media** — multi-select photo/video import, encrypted video playback, secure in-app camera, PDF viewer, OCR search, rotation, draw-and-save photo redaction, and a slideshow. Image imports strip GPS coordinates and camera/device EXIF tags before anything is encrypted.
 - **Local diagnostics** — an app-private crash log with build details, visible under **About → Diagnostics** and exportable as a plain text file through the system picker. No network path exists.
 - **Nested collections and smart folders** — collections can contain subcollections; any search (`type:secret tag:bank`) can be saved as a smart folder, renamed, given an icon, and pinned to Home.
@@ -214,6 +216,8 @@ Version 1.3.x had previously been exercised on the same device for the calculato
 - No scheduled reminders and no Wear OS companion yet.
 - Collections support nesting, saved searches, icons, Home pins, and per-collection locks; smart rules beyond saved queries are not implemented. A locked collection is withheld from lists and search until unlocked for the session, and child collections inherit the lock.
 - Passkeys, animated or whole-vault QR transfer, manual CSV column remapping, 1Password JSON, live-camera QR scanning, and tablet two-pane layouts are not implemented yet. QR transfer is a static image and limited to text items; TOTP QR import reads an image through the system picker.
+- PDF tools and video audio export re-rasterise or remux rather than transcode: PDF output loses its selectable text unless it is re-indexed, and there is no resolution/bitrate re-encode for video or audio.
+- Scanner captures are auto-trimmed, not perspective-corrected, and there is no auto-capture mode yet.
 - The hidden vault is a separate encrypted space opened by its own lock-screen password, not a per-collection visibility flag. Items are not moved between the real and hidden spaces.
 - Tamper detection is best-effort: it catches a replaced or rolled-back `vault.db` unless an attacker can also rewrite app-private preferences.
 - Automatic backups are triggered on unlock (no WorkManager scheduling), run at most once a day, and only after a password unlock (not after a biometric-only unlock).

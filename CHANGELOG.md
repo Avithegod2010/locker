@@ -2,6 +2,14 @@
 
 All notable changes to Locker are recorded here. Versions follow the release tags on GitHub.
 
+## 1.11.0
+
+- **PDF tools** — from the PDF viewer: extract a page range into a new document, merge two vault PDFs, re-compress, or redact a page. Redaction is destructive by design: the page is re-rendered with black boxes burned in and the document is rebuilt, so the covered text is gone rather than hidden. Results are saved as new encrypted items; originals are never modified.
+- **PDF text search** — imported PDFs are indexed on-device, and any PDF that was not (older imports, image-only scans) now has a **Make searchable** action in the viewer. Recognised text lives inside the encrypted item payload, so global search finds documents by their contents.
+- **Skip silence in voice memos** — an optional toggle pauses the recorder during sustained quiet and resumes when you speak again, using separate pause/resume thresholds so breaths do not cause chattering.
+- **Save a video's audio track** — videos gain an **Audio** action that lifts the audio stream into an M4A and saves it as a new vault item, without re-encoding.
+- PDF merge/split/compress output is rasterised, so the result is larger and not selectable; this is the trade-off for redaction actually removing text.
+
 ## 1.10.0
 
 - **Trial vault starter content** — a trial vault now opens with six clearly tagged `Sample` items (a welcome note, an example login, a Wi-Fi entry, two real-world things, and a note about collections) so the first screen is not empty.

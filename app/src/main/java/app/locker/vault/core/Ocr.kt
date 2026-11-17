@@ -6,6 +6,9 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import app.locker.vault.data.PageText
+import app.locker.vault.data.PdfIndex
+import app.locker.vault.data.PdfTextIndex
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -19,8 +22,8 @@ import kotlin.coroutines.resume
  * text is stored inside the encrypted item payload, never in a separate index.
  */
 object Ocr {
-    private const val MAX_CHARS = 20_000
-    private const val MAX_PDF_PAGES = 12
+    private const val MAX_CHARS = PdfTextIndex.MAX_CHARS
+    private const val MAX_PDF_PAGES = PdfTextIndex.DEFAULT_MAX_PAGES
 
     suspend fun recognize(context: Context, uri: Uri, mimeType: String): String =
         withContext(Dispatchers.IO) {
@@ -28,12 +31,26 @@ object Ocr {
                 if (mimeType.startsWith("image/")) {
                     recognizeImage(context, uri)
                 } else if (mimeType == "application/pdf") {
-                    recognizePdf(context, uri)
+                    indexPdf(context, uri, MAX_PDF_PAGES).text
                 } else {
                     ""
                 }
             }.getOrDefault("").take(MAX_CHARS)
         }
+
+    /**
+     * Indexes up to [maxPages] pages of a PDF and returns the joined, capped text together with
+     * the number of pages that actually produced text. Used both at import time and by the
+     * viewer's "make searchable" action for documents imported before OCR existed.
+     */
+    suspend fun indexPdf(
+        context: Context,
+        uri: Uri,
+        maxPages: Int = PdfTextIndex.DEFAULT_MAX_PAGES
+    ): PdfIndex = withContext(Dispatchers.IO) {
+        runCatching { recognizePdf(context, uri, maxPages) }
+            .getOrDefault(PdfIndex("", 0))
+    }
 
     private suspend fun recognizeImage(context: Context, uri: Uri): String {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -54,15 +71,16 @@ object Ocr {
         }
     }
 
-    private suspend fun recognizePdf(context: Context, uri: Uri): String {
+    private suspend fun recognizePdf(context: Context, uri: Uri, maxPages: Int): PdfIndex {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val output = StringBuilder()
+        val pages = mutableListOf<PageText>()
         try {
-            val readDescriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: return ""
+            val readDescriptor = context.contentResolver.openFileDescriptor(uri, "r")
+                ?: return PdfIndex("", 0)
             readDescriptor.use { pfd ->
                 PdfRenderer(pfd).use { renderer ->
-                    val pages = minOf(renderer.pageCount, MAX_PDF_PAGES)
-                    for (index in 0 until pages) {
+                    val limit = PdfTextIndex.pageLimit(renderer.pageCount, maxPages)
+                    for (index in 0 until limit) {
                         renderer.openPage(index).use { page ->
                             val width = 1200
                             val height = (width.toFloat() / page.width * page.height).toInt()
@@ -81,7 +99,7 @@ object Ocr {
                                     }
                             }
                             if (text.isNotBlank()) {
-                                output.append(text).append('\n')
+                                pages += PageText(page = index + 1, text = text)
                             }
                             bitmap.recycle()
                         }
@@ -91,6 +109,6 @@ object Ocr {
         } finally {
             recognizer.close()
         }
-        return output.toString()
+        return PdfTextIndex.merge(pages)
     }
 }

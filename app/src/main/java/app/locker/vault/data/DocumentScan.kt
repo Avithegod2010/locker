@@ -19,7 +19,7 @@ import kotlin.math.min
 object DocumentScan {
     private const val MAX_SIDE = 2200
 
-    fun loadPage(file: File): Bitmap? {
+    fun loadPage(file: File, correctPerspective: Boolean = true): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -32,8 +32,70 @@ object DocumentScan {
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val decoded = BitmapFactory.decodeFile(file.absolutePath, options) ?: return null
-        val rotated = applyExifRotation(file, decoded)
-        return autoTrim(rotated)
+        var page = applyExifRotation(file, decoded)
+        if (correctPerspective) page = straighten(page)
+        return autoTrim(page)
+    }
+
+    /**
+     * Warps a photographed page so its detected corners become a rectangle. Returns the input
+     * untouched when the frame does not contain a convincing page shape, because a wrong warp is
+     * worse than a slightly skewed scan.
+     */
+    fun straighten(bitmap: Bitmap): Bitmap {
+        val sampleWidth = 260
+        val ratio = min(1f, sampleWidth.toFloat() / bitmap.width)
+        val sampleW = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+        val sampleH = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+        val sample = Bitmap.createScaledBitmap(bitmap, sampleW, sampleH, true)
+        val pixels = IntArray(sampleW * sampleH)
+        sample.getPixels(pixels, 0, sampleW, 0, 0, sampleW, sampleH)
+        if (sample !== bitmap) sample.recycle()
+
+        val quad = PageQuadDetector.detect(pixels, sampleW, sampleH) ?: return bitmap
+        val scaleX = bitmap.width.toFloat() / sampleW
+        val scaleY = bitmap.height.toFloat() / sampleH
+        fun scaled(point: QuadPoint) = QuadPoint(point.x * scaleX, point.y * scaleY)
+        val full = PageQuad(
+            topLeft = scaled(quad.topLeft),
+            topRight = scaled(quad.topRight),
+            bottomRight = scaled(quad.bottomRight),
+            bottomLeft = scaled(quad.bottomLeft)
+        )
+        return warpToRect(bitmap, full)
+    }
+
+    /** Maps the quad onto a rectangle sized from its own edges. */
+    fun warpToRect(bitmap: Bitmap, quad: PageQuad): Bitmap {
+        fun distance(a: QuadPoint, b: QuadPoint) =
+            kotlin.math.hypot(b.x - a.x, b.y - a.y)
+        val width = ((distance(quad.topLeft, quad.topRight) +
+            distance(quad.bottomLeft, quad.bottomRight)) / 2f).toInt()
+        val height = ((distance(quad.topLeft, quad.bottomLeft) +
+            distance(quad.topRight, quad.bottomRight)) / 2f).toInt()
+        if (width < 32 || height < 32) return bitmap
+
+        val src = floatArrayOf(
+            quad.topLeft.x, quad.topLeft.y,
+            quad.topRight.x, quad.topRight.y,
+            quad.bottomRight.x, quad.bottomRight.y,
+            quad.bottomLeft.x, quad.bottomLeft.y
+        )
+        val dst = floatArrayOf(
+            0f, 0f,
+            width.toFloat(), 0f,
+            width.toFloat(), height.toFloat(),
+            0f, height.toFloat()
+        )
+        val matrix = Matrix()
+        if (!matrix.setPolyToPoly(src, 0, dst, 0, 4)) return bitmap
+        return try {
+            val warped = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (warped !== bitmap) bitmap.recycle()
+            warped
+        } catch (_: Throwable) {
+            bitmap
+        }
     }
 
     /**

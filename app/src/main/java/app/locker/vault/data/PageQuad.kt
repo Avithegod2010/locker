@@ -103,10 +103,10 @@ object PageQuadDetector {
             }
         }
 
-        // A page should cover a meaningful part of the frame, but never almost all of it:
-        // that usually means there is no page in view and the "content" is the whole scene.
+        // A page should cover a meaningful part of the frame without filling it: a wall or a
+        // desk edge often qualifies as "content", so a very large or very small blob is refused.
         val coverage = content.toFloat() / (width * height)
-        if (coverage < 0.12f || coverage > 0.97f) return null
+        if (coverage < 0.25f || coverage > 0.85f) return null
 
         val quad = PageQuad(
             topLeft = topLeft ?: return null,
@@ -115,7 +115,32 @@ object PageQuadDetector {
             bottomLeft = bottomLeft ?: return null
         )
         if (!quad.looksLikeAPage) return null
-        if (quad.area < width * height * 0.10f) return null
+        if (quad.area < width * height * 0.20f) return null
+        // A real page photographed whole has all four corners inside the frame. Anything touching
+        // the border is either cropped or a room corner, and warping it would ruin the capture.
+        val marginX = width * 0.02f
+        val marginY = height * 0.02f
+        val inside = listOf(quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft)
+            .all { it.x > marginX && it.x < width - marginX && it.y > marginY && it.y < height - marginY }
+        if (!inside) return null
+        // Portrait and landscape pages sit between roughly 0.5 and 2.0; a sliver is not a page.
+        val widthEdge = (
+            kotlin.math.hypot(quad.topRight.x - quad.topLeft.x, quad.topRight.y - quad.topLeft.y) +
+                kotlin.math.hypot(
+                    quad.bottomRight.x - quad.bottomLeft.x,
+                    quad.bottomRight.y - quad.bottomLeft.y
+                )
+            ) / 2f
+        val heightEdge = (
+            kotlin.math.hypot(quad.bottomLeft.x - quad.topLeft.x, quad.bottomLeft.y - quad.topLeft.y) +
+                kotlin.math.hypot(
+                    quad.bottomRight.x - quad.topRight.x,
+                    quad.bottomRight.y - quad.topRight.y
+                )
+            ) / 2f
+        if (widthEdge <= 0f || heightEdge <= 0f) return null
+        val aspect = widthEdge / heightEdge
+        if (aspect < 0.45f || aspect > 2.2f) return null
         return quad
     }
 

@@ -240,7 +240,6 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
                         raw.delete()
                         if (page != null) {
                             pages = pages + page
-                            captureGate = AutoCaptureGate.reset()
                         } else {
                             error = "Could not process that page."
                         }

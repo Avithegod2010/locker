@@ -39,9 +39,8 @@ object AutoCaptureGate {
         maxDrift: Float = MAX_DRIFT
     ): Pair<AutoCaptureState, AutoCaptureAction> {
         if (frameWidth <= 0) return state to AutoCaptureAction.WAITING
-        // A single capture per steady page: wait for the caller to reset.
-        if (state.fired) return state to AutoCaptureAction.WAITING
         if (quad == null) {
+            // Losing the page re-arms the gate for the next one.
             return AutoCaptureState() to AutoCaptureAction.WAITING
         }
 
@@ -49,11 +48,14 @@ object AutoCaptureGate {
         if (previous != null) {
             val drift = drift(previous, quad) / frameWidth.toFloat()
             if (drift > maxDrift) {
-                // The scene moved: start the steady window again from this frame.
+                // The scene moved: start the steady window again and re-arm if we had fired.
                 return AutoCaptureState(stableSince = now, lastQuad = quad) to
                     AutoCaptureAction.WAITING
             }
         }
+        // A steady page is captured once. It stays fired while the same page holds still, so a
+        // phone resting on a desk cannot keep shooting the same scene.
+        if (state.fired) return state to AutoCaptureAction.WAITING
 
         val since = if (state.stableSince < 0L) now else state.stableSince
         if (now - since >= holdMs.coerceAtLeast(0L)) {

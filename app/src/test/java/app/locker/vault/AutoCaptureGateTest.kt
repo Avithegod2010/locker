@@ -111,6 +111,25 @@ class AutoCaptureGateTest {
     }
 
     @Test
+    fun movingToANewPageReArmsTheGate() {
+        val (fired, action) = AutoCaptureGate.update(AutoCaptureState(), quad(), 0L, 200)
+        // Hold long enough to fire.
+        val (shot, shotAction) = AutoCaptureGate.update(fired, quad(), 2_000L, 200)
+        assertEquals(AutoCaptureAction.CAPTURED, shotAction)
+
+        // Same page still holding still: no second shot.
+        val (still, stillAction) = AutoCaptureGate.update(shot, quad(), 2_500L, 200)
+        assertEquals(AutoCaptureAction.WAITING, stillAction)
+        assertTrue(still.fired)
+
+        // The page is replaced by another one: re-armed and counting from now.
+        val (moved, movedAction) = AutoCaptureGate.update(still, quad(offset = 60f), 3_000L, 200)
+        assertEquals(AutoCaptureAction.WAITING, movedAction)
+        assertFalse(moved.fired)
+        assertEquals(3_000L, moved.stableSince)
+    }
+
+    @Test
     fun resetAllowsTheNextPage() {
         val fired = AutoCaptureState(lastQuad = quad(), fired = true)
         val (reset, action) = AutoCaptureGate.update(

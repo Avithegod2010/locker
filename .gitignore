@@ -20,3 +20,6 @@ shots/
 *.apk
 *.aab
 .kotlin/
+
+# local UI dumps from adb
+ui.xml

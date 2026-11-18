@@ -211,6 +211,12 @@ Version **1.11.0** was installed over 1.9.0 (versionCode 13) and verified on the
 - the voice recorder showed the **Skip silence** toggle
 - the trial vault was then deleted through **Delete trial** with the typed confirmation, leaving the app at the welcome screen
 
+Work landed after 1.11.0, verified on the same phone:
+
+- scanner auto-capture stayed at `0 page(s)` on an empty scene after the detector was tightened, and the toggle reads `Auto-capture on`
+- a 24.7 MB clip produced a **2.3 MB** `(480p)` copy that opens in the player, and the original video stayed untouched
+- this also proved the fix for exports being cancelled when the screen sleeps: the transcode now runs on the app scope
+
 Version **1.9.0** was verified on the same phone:
 
 - created a trial vault from the welcome screen with the public default password

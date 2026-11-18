@@ -168,7 +168,7 @@ Each space has its own `KeyMaterialStore`, `SessionManager`, `VaultRepository`, 
 
 ## Known limitations / deferred work
 
-- No documents/media batch beyond PDF tools: scanner perspective correction/auto-capture, page-level perspective warp, and video re-encoding are still open. The old "1.7.0" label is retired.
+- No documents/media batch beyond PDF tools: video re-encoding is still open. Scanner captures now straighten the detected page and can auto-capture once the page is steady, but there is no manual corner adjustment. The old "1.7.0" label is retired.
 - Per-collection locks are enforced in the UI layer, not cryptographically: items in a locked collection are filtered from lists, search, autofill, archive, trash, health, tags, and the widget until unlocked for the session. Anyone who can read the SQLite file still needs the master key, but the lock adds no second key.
 - Autofill lacks inline suggestions and per-fill biometric; protected items and items in locked collections are excluded from autofill, and no dataset is offered when nothing matches.
 - Hidden vault is a separate space, not a per-collection flag; items cannot be moved between spaces.

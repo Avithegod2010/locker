@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
@@ -34,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.PhotoCamera
@@ -66,7 +68,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import app.locker.vault.core.AutoCaptureAction
+import app.locker.vault.core.AutoCaptureGate
+import app.locker.vault.core.AutoCaptureState
 import app.locker.vault.data.DocumentScan
+import app.locker.vault.data.PageAnalyzer
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +113,10 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
         }
     }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var autoCapture by remember { mutableStateOf(false) }
+    var captureGate by remember { mutableStateOf(AutoCaptureState()) }
+    var autoCaptureSignal by remember { mutableStateOf(false) }
+    val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -121,6 +131,7 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
 
     DisposableEffect(Unit) {
         onDispose {
+            analysisExecutor.shutdownNow()
             pages.forEach { page ->
                 page.file.delete()
                 if (!page.thumb.isRecycled) page.thumb.recycle()
@@ -154,13 +165,34 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
         val capture = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
+        val analysis = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        analysis.setAnalyzer(
+            analysisExecutor,
+            PageAnalyzer { quad, frameWidth ->
+                mainExecutor.execute {
+                    if (!autoCapture || capturing || saving || !cameraReady) return@execute
+                    val (next, action) = AutoCaptureGate.update(
+                        state = captureGate,
+                        quad = quad,
+                        now = android.os.SystemClock.elapsedRealtime(),
+                        frameWidth = frameWidth
+                    )
+                    captureGate = next
+                    if (action == AutoCaptureAction.CAPTURED) autoCaptureSignal = true
+                }
+            }
+        )
         runCatching {
             provider.unbindAll()
             provider.bindToLifecycle(
                 lifecycleOwner,
                 CameraSelector.DEFAULT_BACK_CAMERA,
                 preview,
-                capture
+                capture,
+                analysis
             )
             imageCapture = capture
             cameraReady = true
@@ -208,6 +240,7 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
                         raw.delete()
                         if (page != null) {
                             pages = pages + page
+                            captureGate = AutoCaptureGate.reset()
                         } else {
                             error = "Could not process that page."
                         }
@@ -222,6 +255,13 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
                 }
             }
         )
+    }
+
+    LaunchedEffect(autoCaptureSignal) {
+        if (autoCaptureSignal) {
+            autoCaptureSignal = false
+            capturePage()
+        }
     }
 
     fun savePdf() {
@@ -391,6 +431,42 @@ fun DocumentScannerScreen(onBack: () -> Unit) {
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    onClick = {
+                        autoCapture = !autoCapture
+                        captureGate = AutoCaptureGate.reset()
+                    },
+                    shape = RoundedCornerShape(50),
+                    color = if (autoCapture) Color(0xFF5B9CFF).copy(alpha = 0.9f)
+                    else Color.Black.copy(alpha = 0.45f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (autoCapture) "Auto-capture on" else "Auto-capture",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
                 }
             }

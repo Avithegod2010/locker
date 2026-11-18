@@ -19,8 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Audiotrack
+import androidx.compose.material.icons.rounded.Compress
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +56,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import app.locker.vault.data.MediaExport
 import app.locker.vault.data.Mp4Trimmer
+import app.locker.vault.data.VideoTranscode
 import app.locker.vault.data.VaultType
 import app.locker.vault.ui.LocalAppContainer
 import kotlinx.coroutines.Dispatchers
@@ -153,6 +156,44 @@ fun VideoPlayerScreen(
     }
 
     var exportingAudio by remember { mutableStateOf(false) }
+    var compressing by remember { mutableStateOf(false) }
+    var showCompress by remember { mutableStateOf(false) }
+
+    fun compressVideo(preset: VideoTranscode.Preset) {
+        val current = item ?: return
+        val input = file ?: return
+        if (compressing) return
+        showCompress = false
+        compressing = true
+        scope.launch {
+            val output = File(context.cacheDir, "shrink_${System.currentTimeMillis()}.mp4")
+            val ok = runCatching { VideoTranscode.export(input, output, preset) }.getOrDefault(false)
+            if (!ok || !output.exists() || output.length() == 0L) {
+                output.delete()
+                compressing = false
+                android.widget.Toast.makeText(
+                    context,
+                    "Could not re-encode this video",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            val imported = app.repository.importFile(
+                uri = Uri.fromFile(output),
+                type = VaultType.VIDEO,
+                title = VideoTranscode.outputName(current.title, preset.id),
+                collectionIds = current.collectionIds
+            )
+            output.delete()
+            compressing = false
+            android.widget.Toast.makeText(
+                context,
+                if (imported.isSuccess) "Smaller copy saved to the vault"
+                else "Could not save the smaller copy",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     fun saveAudioTrack() {
         val current = item ?: return
@@ -440,8 +481,67 @@ fun VideoPlayerScreen(
                         )
                     }
                 }
+                Surface(
+                    onClick = { showCompress = true },
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.45f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (compressing) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 1.8.dp,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Rounded.Compress,
+                                contentDescription = "Save a smaller copy",
+                                tint = Color.White,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Smaller",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
             }
         }
+    }
+
+    if (showCompress) {
+        AlertDialog(
+            onDismissRequest = { showCompress = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Save a smaller copy") },
+            text = {
+                Column {
+                    Text(
+                        "Locker re-encodes the video on this device and saves the result as a " +
+                            "new item. The original stays untouched.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    VideoTranscode.presets.forEach { preset ->
+                        TextButton(onClick = { compressVideo(preset) }) {
+                            Text(preset.label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCompress = false }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showTrim) {

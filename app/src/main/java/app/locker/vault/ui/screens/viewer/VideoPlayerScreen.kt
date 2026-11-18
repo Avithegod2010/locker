@@ -165,7 +165,8 @@ fun VideoPlayerScreen(
         if (compressing) return
         showCompress = false
         compressing = true
-        scope.launch {
+        // The container scope, not the screen's: a long re-encode must survive leaving the player.
+        app.appScope.launch {
             val output = File(context.cacheDir, "shrink_${System.currentTimeMillis()}.mp4")
             val ok = runCatching { VideoTranscode.export(input, output, preset) }.getOrDefault(false)
             if (!ok || !output.exists() || output.length() == 0L) {
@@ -200,7 +201,7 @@ fun VideoPlayerScreen(
         val input = file ?: return
         if (exportingAudio) return
         exportingAudio = true
-        scope.launch {
+        app.appScope.launch {
             val output = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
             val ok = runCatching { MediaExport.extractAudio(input, output) }.getOrDefault(false)
             if (!ok || !output.exists() || output.length() == 0L) {

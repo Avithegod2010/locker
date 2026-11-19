@@ -150,6 +150,35 @@ The release variant has `DEV_BUILD=false` and defaults screenshot protection to 
 
 The **1.3.1 hotfix, 1.4.0, 1.4.1, 1.5.0, 1.6.0, 1.8.0, and 1.9.0** are packaged with R8 disabled (`isMinifyEnabled = false`) because the build host repeatedly ran out of native memory under concurrent Gradle builds. Signing, behavior, and permissions are identical — the APK is simply larger and not obfuscated. Later releases will return to the minified configuration.
 
+### Building the release in GitHub Actions
+
+The release APK can be built on a GitHub runner (4 vCPU, 16 GB) instead of the dev machine, which avoids the local Gradle memory limits and takes a couple of minutes once the caches are warm.
+
+`.github/workflows/release.yml` runs in two ways:
+
+- **Tag push** (`v*`) — builds, signs, and publishes a GitHub release with the APK, its SHA-256, and the signing certificate fingerprint in the notes.
+- **Manual run** (`Actions → Release APK → Run workflow`) — builds and uploads the APK as an artifact without publishing. Tick **R8** to produce a minified build for testing.
+
+Required repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `KEYSTORE_BASE64` | `base64 -w0 keystore/locker-release.jks` |
+| `KEYSTORE_STORE_PASSWORD` | keystore store password |
+| `KEY_ALIAS` | key alias |
+| `KEY_KEY_PASSWORD` | key password |
+
+The workflow refuses to publish a tagged release when the signing secrets are missing, so a tag can never produce an unsigned "release".
+
+How it stays fast:
+
+- Gradle dependencies, the wrapper, and the build cache are restored by `gradle/actions/setup-gradle`; the first run populates them, later runs reuse them.
+- The release job builds only `:app:assembleRelease` — no `clean`, no debug variant, no duplicate packaging.
+- Unit tests are **not** repeated here; `android.yml` already runs them on every push and pull request, so check that run is green before tagging.
+- A newer run for the same tag cancels the older one.
+
+R8 is still off by default for local builds. The CI workflow can opt in with `-PlockerMinifyRelease=true`, which roughly halves the download size; test a minified artifact on a device (unlock, OCR a PDF, play a video) before publishing one as a release.
+
 ### One-command release
 
 `scripts/release.ps1` bumps `versionCode`/`versionName` when needed, runs the unit tests, builds the signed APK, computes its SHA-256, commits, tags, pushes, and publishes the GitHub release:

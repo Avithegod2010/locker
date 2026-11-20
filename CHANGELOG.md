@@ -2,6 +2,12 @@
 
 All notable changes to Locker are recorded here. Versions follow the release tags on GitHub.
 
+## Unreleased
+
+- **Restore review** - after opening a `.locker` archive, the preview now lists the items that will be added, replaced, or removed instead of showing counts only. The full list is shown in a review dialog before Merge or Replace is committed; merge never removes current items.
+- **Themed icon** - Android 13+ monochrome adaptive icon (`ic_launcher_monochrome`) so Locker matches the system themed-icon treatment.
+- **Download verification** - Obtainium setup and a plain "verify your download" guide with the permanent signing certificate SHA-256, plus the same fingerprint in `SECURITY.md`.
+
 ## 1.11.0
 
 - **PDF tools** — from the PDF viewer: extract a page range into a new document, merge two vault PDFs, re-compress, or redact a page. Redaction is destructive by design: the page is re-rendered with black boxes burned in and the document is rebuilt, so the covered text is gone rather than hidden. Results are saved as new encrypted items; originals are never modified.

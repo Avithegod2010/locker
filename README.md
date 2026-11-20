@@ -2,30 +2,38 @@
 
 <h1>Locker</h1>
 
-<strong>An encrypted vault that stays on your Android device.</strong>
+<p><strong>Your offline Android vault for passwords, notes, documents and photos.</strong></p>
 
-<p>Keep passwords, notes, documents, photos and voice memos together.</p>
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="locker-hero.png" />
+  <img src="locker-hero.gif" width="820" alt="Locker’s blue keypad shield set into an illustrated vault door" />
+</picture>
 
-<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">Download APK v1.11.0</a></strong> · <a href="#quick-start">Quick start</a> · <a href="https://github.com/Avithegod2010/locker/releases/tag/v1.11.0">Release notes</a></p>
+<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">⬇️ Download APK v1.11.0</a></strong> · <a href="#quick-start">🚀 Quick start</a> · <a href="#backups-and-recovery">🗝️ Backups and recovery</a> · <a href="SECURITY.md">🛡️ Security policy</a></p>
 
-<sub>Android 8.0 or newer · Works offline · No account required</sub>
+<sub>Android 8.0 or newer · On-device encryption · No account required · <a href="https://github.com/Avithegod2010/locker/releases/tag/v1.11.0">Release notes</a></sub>
 
 </div>
 
-## Quick start
+<a name="quick-start"></a>
+
+## 🚀 Quick start
 
 1. Install the APK and create a vault password of at least 10 characters.
 2. Save the recovery code somewhere you can reach if you lose access to the vault.
 3. Add a login, note, file or photo. Enable biometric unlock or Android Autofill in **Security** if you want them.
 4. Export an encrypted `.locker` backup. Keep a copy you can reach from another device.
 
-The trial vault starts with sample entries. Set your own password before adding personal data.
+> [!TIP]
+> Open the trial vault to explore sample entries. Set your own password before adding personal data.
 
-## Features
+<a name="features"></a>
 
-- **Manage passwords.** Generate passwords, fill saved logins, keep one-time codes and import entries from other password managers.
-- **Keep files and notes handy.** Import files, scan documents to PDF, capture photos and voice memos, and find items with tags and search.
-- **Recover and move your vault.** Export an encrypted backup and preview what will be restored before merging or replacing items.
+## ✨ Features
+
+| 🔑 Passwords | 📁 Files and notes | 🗝️ Backup and restore |
+| --- | --- | --- |
+| Generate passwords, fill saved logins, keep one-time codes and import entries from other password managers. | Scan documents to PDF, capture photos and voice memos, and find items with tags and search. | Export an encrypted backup, preview the restore, then merge or replace items. |
 
 <details>
 <summary>See all features</summary>
@@ -77,7 +85,9 @@ The trial vault starts with sample entries. Set your own password before adding 
 
 </details>
 
-## Backups and recovery
+<a name="backups-and-recovery"></a>
+
+## 🗝️ Backups and recovery
 
 | If you want to… | Use |
 | --- | --- |
@@ -85,9 +95,14 @@ The trial vault starts with sample entries. Set your own password before adding 
 | Move your vault to another device | An encrypted **.locker backup** and its password |
 | Check an automatic backup | **Verify latest snapshot** to run a restore check without modifying the vault |
 
-## Security design
+<a name="security-design"></a>
 
-Locker encrypts vault items and files on-device. The app has no internet permission. Keep the recovery code safe. If you lose both the vault password and recovery code, Locker cannot reset access to that vault. [Security policy](SECURITY.md)
+## 🛡️ Security design
+
+Locker encrypts vault items and files on-device and has no internet permission. See the [security policy](SECURITY.md).
+
+> [!IMPORTANT]
+> Save your recovery code outside the vault. If you lose both your password and your recovery code, you lose access to the vault.
 
 <details>
 <summary>Encryption and storage details</summary>
@@ -126,7 +141,9 @@ There is no server and no password reset. If you lose both your password and you
 
 </details>
 
-## Build
+<a name="build"></a>
+
+## 🛠️ Build
 
 <details>
 <summary>Build, test and sign an Android APK</summary>

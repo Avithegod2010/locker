@@ -1,10 +1,12 @@
-# Locker
+# Locker · Offline Android vault
 
-A local-first, strongly encrypted Android vault for secrets, notes, documents, things, and photos. Built with Kotlin, Jetpack Compose, and Material 3 (Material You).
+Keep passwords, notes, documents and photos in an encrypted vault on your Android device.
 
-Locker is inspired by the calm, card-based layout of Ente Locker, but it is deliberately **offline-only**: the app has **no INTERNET permission**, no account, no sync, and no telemetry.
+**[Download APK v1.11.0](https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk)** · [Security policy](SECURITY.md) · [Release notes](https://github.com/Avithegod2010/locker/releases/tag/v1.11.0)
 
-[Download the latest release](https://github.com/Avithegod2010/locker/releases/latest) · [Security policy](SECURITY.md) · [MIT license](LICENSE)
+![Locker workflow illustration showing the vault, adding a sample note, and unlocking](workflow-overview.png)
+
+Locker runs offline and requires no account. Built with Kotlin, Jetpack Compose and Material You. Inspired by [Ente Locker](https://ente.com/locker/).
 
 ## Quick start
 

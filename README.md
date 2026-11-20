@@ -1,24 +1,37 @@
-# Locker · Offline Android vault
+<div align="center">
 
-Keep passwords, notes, documents and photos in an encrypted vault on your Android device.
+<h1>Locker</h1>
 
-**[Download APK v1.11.0](https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk)** · [Security policy](SECURITY.md) · [Release notes](https://github.com/Avithegod2010/locker/releases/tag/v1.11.0)
+<strong>An encrypted vault that stays on your Android device.</strong>
 
-![Locker workflow illustration showing the vault, adding a sample note, and unlocking](workflow-overview.png)
+<p>Keep passwords, notes, documents, photos and voice memos together.</p>
 
-Locker runs offline and requires no account. Built with Kotlin, Jetpack Compose and Material You. Inspired by [Ente Locker](https://ente.com/locker/).
+<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">Download APK v1.11.0</a></strong> · <a href="#quick-start">Quick start</a> · <a href="https://github.com/Avithegod2010/locker/releases/tag/v1.11.0">Release notes</a></p>
+
+<sub>Android 8.0 or newer · Works offline · No account required</sub>
+
+</div>
 
 ## Quick start
 
-1. Install `Locker-1.11.0-release.apk` from the latest release.
-2. Create a vault password (10+ characters) and save the numeric recovery code.
-3. Optionally enable biometrics and Autofill in **Security**.
-4. Add a secret, note, photo, video, voice memo, scan, or file. Everything is encrypted on-device before it is written to disk.
+1. Install the APK and create a vault password of at least 10 characters.
+2. Save the recovery code somewhere you can reach if you lose access to the vault.
+3. Add a login, note, file or photo. Enable biometric unlock or Android Autofill in **Security** if you want them.
+4. Export an encrypted `.locker` backup. Keep a copy you can reach from another device.
+
+The trial vault starts with sample entries. Set your own password before adding personal data.
 
 ## Features
 
+- **Manage passwords.** Generate passwords, fill saved logins, keep one-time codes and import entries from other password managers.
+- **Keep files and notes handy.** Import files, scan documents to PDF, capture photos and voice memos, and find items with tags and search.
+- **Recover and move your vault.** Export an encrypted backup and preview what will be restored before merging or replacing items.
+
+<details>
+<summary>See all features</summary>
+
 - **Five vault types** — Secret (passwords), Note, Thing (real-world item), File, and Photo.
-- **Temporary trial vault** — on first run you can skip setup and open a vault with the public default password `Qwerty1234567`, then change it from Security. A persistent banner, lock-screen badge, drawer notice, and Security warning keep reminding you until a real password is set. A trial now starts with six clearly tagged **Sample** items and a three-step tour, shows how many days are left in its 7-day window, and can be deleted on its own with a typed confirmation. When the window ends nothing is deleted: the vault keeps every item and asks you to set a password or delete it.
+- **Temporary trial vault** — try Locker with sample items before setting up your own vault. Set a private password before adding personal data.
 - **Generated vault password** — during normal onboarding, generate a strong password, reveal it, and copy it before creating the vault.
 - **Strong encryption at rest** — every payload and file is authenticated and encrypted. Plaintext is never written to the vault database or vault file directory.
 - **Numeric recovery code** — 24 random digits plus a check digit that catches typos, independently wrapping the vault key. Older Base32 recovery keys still unlock the same vault, and the code can be rotated from Security. Onboarding and the Security dialog share the same five-group formatting, and you can save a printable one-page **recovery kit PDF** with the key and step-by-step instructions. **Recovery shares** split the code into three paper shares; any two reconstruct it.
@@ -62,7 +75,22 @@ Locker runs offline and requires no account. Built with Kotlin, Jetpack Compose 
 - **Appearance** — dark, light, or system theme, eight accent palettes, an optional pure-black OLED background, and an optional wallpaper-based Material You colour scheme.
 - **Encrypted local profile** — name/label are stored inside the vault, not in system preferences.
 
+</details>
+
+## Backups and recovery
+
+| If you want to… | Use |
+| --- | --- |
+| Recover access to this vault after forgetting the password | The saved **recovery code** |
+| Move your vault to another device | An encrypted **.locker backup** and its password |
+| Check an automatic backup | **Verify latest snapshot** to run a restore check without modifying the vault |
+
 ## Security design
+
+Locker encrypts vault items and files on-device. The app has no internet permission. Keep the recovery code safe. If you lose both the vault password and recovery code, Locker cannot reset access to that vault. [Security policy](SECURITY.md)
+
+<details>
+<summary>Encryption and storage details</summary>
 
 | Layer | Implementation |
 | --- | --- |
@@ -96,7 +124,12 @@ The 32-byte master key is zeroed when the vault locks. Long-running operations h
 
 There is no server and no password reset. If you lose both your password and your recovery key, the vault cannot be recovered. That is the trade-off for local-only, zero-knowledge storage.
 
+</details>
+
 ## Build
+
+<details>
+<summary>Build, test and sign an Android APK</summary>
 
 Requirements:
 
@@ -113,7 +146,7 @@ Requirements:
 ./gradlew :app:assembleDebug
 ```
 
-The project includes `local.properties` pointing at the local SDK for this machine. Change it if your SDK lives elsewhere.
+If Gradle cannot find the Android SDK, set its path in your local `local.properties`.
 
 Run the unit tests:
 
@@ -164,7 +197,12 @@ Add `-DryRun` to stop after the build and hash, or `-SkipTests` when the tests a
 
 `BuildConfig.DEV_BUILD` is true only for debug builds. The screenshot-protection preference defaults to **on** in both debug and release; turn it off from Security when you need to capture screenshots during development.
 
-## Project structure
+</details>
+
+<details>
+<summary>Source layout, device checks and known limitations</summary>
+
+### Project structure
 
 ```
 app/src/main/java/app/locker/vault/
@@ -177,7 +215,7 @@ app/src/main/java/app/locker/vault/
                         trash, legacy, settings
 ```
 
-## Verified on device
+### Verified on device
 
 The signed release build (version 1.6.0; R8 disabled because the build host hit native memory limits under concurrent builds) was installed with `adb install -r` on an Android 17 Samsung phone (SM-S942B) and exercised end-to-end with a temporary vault:
 
@@ -229,7 +267,7 @@ Version **1.9.0** was verified on the same phone:
 
 Version 1.3.x had previously been exercised on the same device for the calculator disguise, in-app video recording, voice memos, document scanning, password import, smart folders, and the icon set. Version 1.2.0 was exercised for the numeric recovery code, launcher disguises, accent themes, and true-black mode. Version 1.1.0 was exercised for vault creation, release-mode unlocking, recovery-key retrieval/rotation, encrypted notes and secrets with live TOTP, encrypted photo/video import and playback, `.locker` backup/merge/replace, and raw `vault.db` inspection proving that no plaintext item fields are stored.
 
-## Known limitations / next steps
+### Known limitations / next steps
 
 - Intentionally **local-only**; there is no cloud sync, account, or cross-device sharing.
 - No scheduled reminders and no Wear OS companion yet.
@@ -247,6 +285,14 @@ Version 1.3.x had previously been exercised on the same device for the calculato
 - English UI only.
 - Legacy is an encrypted emergency-contact/notes page; it does not automatically transmit anything to contacts.
 
-## Fonts
+### Fonts
 
 Plus Jakarta Sans is bundled under the SIL Open Font License. The license text is in `app/src/main/assets/licenses/OFL-PlusJakartaSans.txt`.
+
+</details>
+
+## Project links
+
+[Changelog](CHANGELOG.md) · [Security policy](SECURITY.md) · [MIT license](LICENSE)
+
+Built with Kotlin, Jetpack Compose and Material You. Inspired by [Ente Locker](https://ente.com/locker/).

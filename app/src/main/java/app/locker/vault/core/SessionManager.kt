@@ -256,7 +256,9 @@ class SessionManager(
                 salt + password.concatToString().toByteArray(Charsets.UTF_8)
             )
             try {
-                actual.contentEquals(expected)
+                // Constant-time: contentEquals short-circuits on the first differing
+                // byte, which leaks how much of a guess matched.
+                java.security.MessageDigest.isEqual(actual, expected)
             } finally {
                 Crypto.wipe(actual)
                 Crypto.wipe(expected)
@@ -270,7 +272,7 @@ class SessionManager(
                     Crypto.wipe(key)
                 }
                 try {
-                    actual.contentEquals(expected)
+                    java.security.MessageDigest.isEqual(actual, expected)
                 } finally {
                     Crypto.wipe(actual)
                     Crypto.wipe(expected)

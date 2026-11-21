@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!--
+        Android 13+ themed icon. The system ignores colour and tints the alpha
+        channel, so this is the blue-shield silhouette with the keypad punched
+        out as transparent holes. Keep it a single solid fill.
+    -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,16 L23,28 V53 C23,74 35.4,87.9 54,93 C72.6,87.9 85,74 85,53 V28 Z M44,41.1 a3.2,3.2 0 1 1 -0.01,0 Z M54,41.1 a3.2,3.2 0 1 1 -0.01,0 Z M64,41.1 a3.2,3.2 0 1 1 -0.01,0 Z M44,51.6 a3.2,3.2 0 1 1 -0.01,0 Z M54,51.6 a3.2,3.2 0 1 1 -0.01,0 Z M64,51.6 a3.2,3.2 0 1 1 -0.01,0 Z M44,62.1 a3.2,3.2 0 1 1 -0.01,0 Z M54,62.1 a3.2,3.2 0 1 1 -0.01,0 Z M64,62.1 a3.2,3.2 0 1 1 -0.01,0 Z M46,72 H62 A3,3 0 0 1 65,75 A3,3 0 0 1 62,78 H46 A3,3 0 0 1 43,75 A3,3 0 0 1 46,72 Z" />
+</vector>

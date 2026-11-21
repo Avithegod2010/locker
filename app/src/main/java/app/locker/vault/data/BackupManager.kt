@@ -40,6 +40,19 @@ data class BackupSummary(
     val replaced: Boolean
 )
 
+/**
+ * A read-only restore preview: the archive header plus the item-level diff
+ * for both modes. Nothing in the vault is changed while this is built.
+ */
+data class RestorePreview(
+    val backup: BackupPreview,
+    val merge: RestoreDiff,
+    val replace: RestoreDiff
+) {
+    fun diffFor(mode: RestoreMode): RestoreDiff =
+        if (mode == RestoreMode.REPLACE) replace else merge
+}
+
 enum class RestoreMode { REPLACE, MERGE }
 
 /**
@@ -199,6 +212,105 @@ class BackupManager(
                         fileCount = manifest.optInt("fileCount", 0),
                         totalBytes = manifest.optLong("totalBytes", 0L),
                         matchesCurrentVault = matches
+                    )
+                } finally {
+                    header.wipe()
+                }
+            }
+        }
+    }
+
+    /**
+     * Reads the item metadata out of an archive and compares it with the
+     * current vault. File records follow item records in format v1, so the
+     * preview stops as soon as it reaches them: the user gets an item-level
+     * diff without waiting for a multi-gigabyte backup to be streamed twice.
+     * The full archive hash is checked by [restore] before it changes anything.
+     */
+    suspend fun previewRestore(
+        uri: Uri,
+        password: CharArray
+    ): Result<RestorePreview> = withContext(Dispatchers.IO) {
+        runCatching {
+            val input = resolver.openInputStream(uri)?.buffered()
+                ?: error("Could not open the backup")
+            DataInputStream(input).use { data ->
+                val header = readHeader(data, password)
+                try {
+                    val manifest = header.manifest
+                    val currentMaster = session.masterKeyOrNull()
+                    val matches = currentMaster?.let { Crypto.isEqual(it, header.masterKey) } ?: false
+                    currentMaster?.let { Crypto.wipe(it) }
+                    val backup = BackupPreview(
+                        createdAt = manifest.optLong("createdAt", 0L),
+                        itemCount = manifest.optInt("itemCount", 0),
+                        collectionCount = manifest.optInt("collectionCount", 0),
+                        legacyCount = manifest.optInt("legacyCount", 0),
+                        fileCount = manifest.optInt("fileCount", 0),
+                        totalBytes = manifest.optLong("totalBytes", 0L),
+                        matchesCurrentVault = matches
+                    )
+                    if (!matches) {
+                        return@runCatching RestorePreview(
+                            backup = backup,
+                            merge = RestoreDiffer.diff(emptyList(), emptyList(), RestoreMode.MERGE),
+                            replace = RestoreDiffer.diff(emptyList(), emptyList(), RestoreMode.REPLACE)
+                        )
+                    }
+
+                    val items = mutableListOf<ItemRow>()
+                    val reader = RecordReader(data, header.backupKey, header.prefix)
+                    while (true) {
+                        val record = reader.readHeader()
+                        when (record.type) {
+                            TYPE_COLLECTION, TYPE_LEGACY, TYPE_PROFILE -> {
+                                // Metadata that does not affect the item diff, but
+                                // still has to be read to advance the record stream.
+                                reader.readBytes(MAX_METADATA)
+                            }
+                            TYPE_ITEM -> {
+                                val bytes = reader.readBytes(MAX_METADATA)
+                                items += decodeItemRow(record.id, bytes)
+                            }
+                            TYPE_FILE, TYPE_THUMB -> {
+                                // Format v1 writes all item records before file bodies.
+                                break
+                            }
+                            TYPE_END -> {
+                                val expected = reader.readBytes(256, trackDigest = false)
+                                val actual = reader.digestHex()
+                                if (String(expected, Charsets.UTF_8) != actual) {
+                                    error("Backup checksum failed; the file is damaged")
+                                }
+                                break
+                            }
+                            else -> error("Unknown backup record")
+                        }
+                    }
+                    if (items.size != manifest.optInt("itemCount", items.size)) {
+                        error("Backup manifest does not match its contents")
+                    }
+
+                    val backupItems = items.map { row ->
+                        BackupItemSnapshot(
+                            id = row.id,
+                            title = itemTitle(row, header.masterKey),
+                            type = row.type,
+                            updatedAt = row.updatedAt
+                        )
+                    }
+                    val currentItems = db.readItems().map { row ->
+                        BackupItemSnapshot(
+                            id = row.id,
+                            title = itemTitle(row, header.masterKey),
+                            type = row.type,
+                            updatedAt = row.updatedAt
+                        )
+                    }
+                    RestorePreview(
+                        backup = backup,
+                        merge = RestoreDiffer.diff(backupItems, currentItems, RestoreMode.MERGE),
+                        replace = RestoreDiffer.diff(backupItems, currentItems, RestoreMode.REPLACE)
                     )
                 } finally {
                     header.wipe()
@@ -554,6 +666,23 @@ class BackupManager(
         .put("payload", Crypto.b64encode(row.payload))
         .toString()
         .toByteArray(Charsets.UTF_8)
+
+    /**
+     * Decrypts only enough of an item payload to show its title in the
+     * restore review. A damaged row falls back to its type label rather than
+     * hiding it from the diff.
+     */
+    private fun itemTitle(row: ItemRow, key: ByteArray): String {
+        val fallback = runCatching { VaultType.valueOf(row.type).label }.getOrDefault("Item")
+        return try {
+            val aad = "locker:item:${row.id}:${row.type}".toByteArray()
+            val plaintext = Crypto.decrypt(key, row.payload, aad) ?: return fallback
+            val json = JSONObject(String(plaintext, Charsets.UTF_8))
+            json.optString("title").ifBlank { fallback }
+        } catch (_: Exception) {
+            fallback
+        }
+    }
 
     private fun decodeItemRow(id: String, bytes: ByteArray): ItemRow {
         val json = JSONObject(String(bytes, Charsets.UTF_8))

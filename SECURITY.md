@@ -24,6 +24,19 @@ Please use **Security → Report a vulnerability** on this repository. Do not op
 - Forgotten password **and** recovery key (the vault is intentionally unrecoverable)
 - Denial of service against the local app
 
+## Release signing
+
+Every published APK is signed with the same long-lived certificate. Verify it
+before installing a build you did not make:
+
+- Application ID: `app.locker.vault`
+- Certificate SHA-256: `96fb04402dbea1109402e6755e1b1187f393d632f0835d4a790b0ad083420867`
+- Colon form: `96:FB:04:40:2D:BE:A1:10:94:02:E6:75:5E:1B:11:87:F3:93:D6:32:F0:83:5D:4A:79:0B:0A:D0:83:42:08:67`
+
+See [docs/verify-download.md](docs/verify-download.md) for the `apksigner`
+command and the Obtainium setup. A download with a different fingerprint
+should not be installed.
+
 ## Personal data
 
 The repository contains source code and documentation only. Signing keys, local SDK paths, user vaults, screenshots, and build artifacts are ignored and must never be committed.

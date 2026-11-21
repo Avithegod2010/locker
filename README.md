@@ -4,7 +4,7 @@
 
 <p><strong>Your offline Android vault for passwords, notes, documents and photos.</strong></p>
 
-<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">⬇️ Download APK v1.11.0</a></strong> · <a href="#quick-start">🚀 Quick start</a> · <a href="#backups-and-recovery">🗝️ Backups and recovery</a> · <a href="SECURITY.md">🛡️ Security policy</a></p>
+<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">⬇️ Download APK v1.11.0</a></strong> · <a href="#quick-start">🚀 Quick start</a> · <a href="#backups-and-recovery">🗝️ Backups and recovery</a> · <a href="docs/verify-download.md">🔐 Verify your download</a> · <a href="SECURITY.md">🛡️ Security policy</a></p>
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="locker-hero.png" />
@@ -27,6 +27,32 @@
 > [!TIP]
 > Open the trial vault to explore sample entries. Set your own password before adding personal data.
 
+<a name="verify-download"></a>
+
+## 🔐 Install and verify your download
+
+The APK is published on **GitHub Releases** and can be kept up to date with
+**[Obtainium](https://github.com/ImranR98/Obtainium)**. Add the repository URL
+`https://github.com/Avithegod2010/locker` as a GitHub source and filter for
+`Locker-.*-release\.apk`; Obtainium reads the same signed asset as the release
+page. No account or Play Store is involved.
+
+Every release is signed with the same permanent certificate:
+
+| Check | Value |
+| --- | --- |
+| Application ID | `app.locker.vault` |
+| Signing certificate SHA-256 | `96fb04402dbea1109402e6755e1b1187f393d632f0835d4a790b0ad083420867` |
+| SHA-256, colon form | `96:FB:04:40:2D:BE:A1:10:94:02:E6:75:5E:1B:11:87:F3:93:D6:32:F0:83:5D:4A:79:0B:0A:D0:83:42:08:67` |
+
+Compare the fingerprint with `apksigner verify --print-certs` before installing
+an APK you did not build yourself, and compare the APK's SHA-256 with the value
+in the release notes. Android will also refuse to update an installed Locker
+with an APK signed by a different key, so a bad download cannot overwrite your
+vault.
+
+**[Full install, Obtainium, and verification guide →](docs/verify-download.md)**
+
 <a name="features"></a>
 
 ## ✨ Features
@@ -46,7 +72,7 @@
 - **Hidden vault (travel mode)** — set a separate hidden password and enter it at the lock screen to open an independent encrypted vault with its own keys, database, files, recovery key, and items. The real vault stays locked and untouched.
 - **Tamper detection** — the encrypted database's fingerprint is recorded on a clean lock and checked on the next unlock; a replaced or rolled-back `vault.db` raises a warning (best-effort, not cryptographic prevention).
 - **Encrypted QR transfer** — export a text item as a passphrase-protected QR image and import it on another device, with no network involved. Large files use the encrypted `.locker` backup instead.
-- **Backup and restore** — create one encrypted `.locker` archive, preview it, then merge or replace. Whole-archive integrity is verified before anything is changed.
+- **Backup and restore** — create one encrypted `.locker` archive, preview it, review the items that will be added, replaced, or removed, then merge or replace. Whole-archive integrity is verified before anything is changed.
 - **Biometric unlock** — hardware-backed Android Keystore key that requires a fresh authentication, running in a dedicated secure activity.
 - **Vault password changes** — re-wraps the vault key without touching any items; Argon2id parameters auto-upgrade on unlock.
 - **Passwords** — TOTP codes, custom fields, password health, offline audit, a configurable generator (length, digits, symbols, look-alike filter), tags, and website fields.

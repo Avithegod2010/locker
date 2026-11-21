@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,10 +17,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.RemoveCircle
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,9 +48,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.documentfile.provider.DocumentFile
 import app.locker.vault.core.Formatting
-import app.locker.vault.data.BackupPreview
+import app.locker.vault.data.BackupItemChange
 import app.locker.vault.data.BackupSummary
+import app.locker.vault.data.RestoreDiff
 import app.locker.vault.data.RestoreMode
+import app.locker.vault.data.RestorePreview
 import app.locker.vault.ui.LocalAppContainer
 import app.locker.vault.ui.components.LockerTextField
 import app.locker.vault.ui.components.PrimaryButton
@@ -75,6 +81,7 @@ fun BackupScreen(onBack: () -> Unit) {
     SecureWindow()
 
     var progress by remember { mutableStateOf<Float?>(null) }
+    var progressTitle by remember { mutableStateOf("Working") }
     var error by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -84,9 +91,9 @@ fun BackupScreen(onBack: () -> Unit) {
     var showRestorePassword by remember { mutableStateOf(false) }
     var restorePassword by remember { mutableStateOf("") }
     var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var preview by remember { mutableStateOf<BackupPreview?>(null) }
+    var preview by remember { mutableStateOf<RestorePreview?>(null) }
     var restoreMode by remember { mutableStateOf(RestoreMode.MERGE) }
-    var showReplaceConfirm by remember { mutableStateOf(false) }
+    var showRestoreReview by remember { mutableStateOf(false) }
     var lastSummary by remember { mutableStateOf<BackupSummary?>(null) }
     val settings by app.preferences.settings.collectAsStateWithLifecycle()
     var showKeep by remember { mutableStateOf(false) }
@@ -105,6 +112,7 @@ fun BackupScreen(onBack: () -> Unit) {
         val password = pendingCreatePassword
         pendingCreatePassword = ""
         if (password.length < 10) return@rememberLauncherForActivityResult
+        progressTitle = "Encrypting backup"
         progress = 0f
         error = null
         status = null
@@ -399,20 +407,7 @@ fun BackupScreen(onBack: () -> Unit) {
                 preview = preview!!,
                 mode = restoreMode,
                 onMode = { restoreMode = it },
-                onRestore = {
-                    if (restoreMode == RestoreMode.REPLACE) showReplaceConfirm = true
-                    else performRestore(
-                        app, restoreUri, restorePassword, restoreMode,
-                        onProgress = { progress = it },
-                        onDone = { summary ->
-                            progress = null
-                            lastSummary = summary
-                            status = "Restored ${summary.itemsRestored} items and ${summary.filesRestored} files"
-                            preview = null
-                        },
-                        onError = { error = it; progress = null }
-                    )
-                }
+                onRestore = { showRestoreReview = true }
             )
         }
 
@@ -479,7 +474,7 @@ fun BackupScreen(onBack: () -> Unit) {
             onDismissRequest = {},
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(28.dp),
-            title = { Text(if (preview == null) "Encrypting backup" else "Restoring") },
+            title = { Text(progressTitle) },
             text = {
                 Column {
                     LinearProgressIndicator(
@@ -528,10 +523,14 @@ fun BackupScreen(onBack: () -> Unit) {
             onContinue = {
                 val uri = restoreUri
                 if (uri == null) return@BackupPasswordDialog
+                progressTitle = "Inspecting backup"
                 progress = 0f
                 error = null
                 scope.launch {
-                    val result = app.backupManager.inspect(uri, restorePassword.toCharArray())
+                    val result = app.backupManager.previewRestore(
+                        uri,
+                        restorePassword.toCharArray()
+                    )
                     progress = null
                     result.onSuccess {
                         preview = it
@@ -544,37 +543,25 @@ fun BackupScreen(onBack: () -> Unit) {
         )
     }
 
-    if (showReplaceConfirm) {
-        AlertDialog(
-            onDismissRequest = { showReplaceConfirm = false },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(28.dp),
-            icon = { androidx.compose.material3.Icon(Icons.Rounded.Warning, contentDescription = null) },
-            title = { Text("Replace this vault?") },
-            text = {
-                Text(
-                    "Every current item and file will be deleted, then the backup will be written in its place. This cannot be undone.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+    if (showRestoreReview && preview != null) {
+        RestoreReviewDialog(
+            preview = preview!!,
+            mode = restoreMode,
+            onDismiss = { showRestoreReview = false },
+            onConfirm = {
+                showRestoreReview = false
+                progressTitle = "Restoring"
+                performRestore(
+                    app, restoreUri, restorePassword, restoreMode,
+                    onProgress = { progress = it },
+                    onDone = { summary ->
+                        progress = null
+                        lastSummary = summary
+                        status = "Restored ${summary.itemsRestored} items and ${summary.filesRestored} files"
+                        preview = null
+                    },
+                    onError = { error = it; progress = null }
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showReplaceConfirm = false
-                    performRestore(
-                        app, restoreUri, restorePassword, RestoreMode.REPLACE,
-                        onProgress = { progress = it },
-                        onDone = { summary ->
-                            progress = null
-                            lastSummary = summary
-                            status = "Restored ${summary.itemsRestored} items and ${summary.filesRestored} files"
-                            preview = null
-                        },
-                        onError = { error = it; progress = null }
-                    )
-                }) { Text("Replace vault", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReplaceConfirm = false }) { Text("Cancel") }
             }
         )
     }
@@ -606,11 +593,12 @@ private fun performRestore(
 
 @Composable
 private fun RestorePreviewCard(
-    preview: BackupPreview,
+    preview: RestorePreview,
     mode: RestoreMode,
     onMode: (RestoreMode) -> Unit,
     onRestore: () -> Unit
 ) {
+    val backup = preview.backup
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -624,18 +612,18 @@ private fun RestorePreviewCard(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "${preview.itemCount} items · ${preview.collectionCount} collections · " +
-                    "${preview.fileCount} files · ${Formatting.bytes(preview.totalBytes)}",
+                "${backup.itemCount} items · ${backup.collectionCount} collections · " +
+                    "${backup.fileCount} files · ${Formatting.bytes(backup.totalBytes)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                "Created ${Formatting.fullDate(preview.createdAt)}",
+                "Created ${Formatting.fullDate(backup.createdAt)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
             Spacer(Modifier.height(12.dp))
-            if (!preview.matchesCurrentVault) {
+            if (!backup.matchesCurrentVault) {
                 Text(
                     "This backup belongs to a different vault and cannot be restored here.",
                     style = MaterialTheme.typography.bodySmall,
@@ -646,12 +634,234 @@ private fun RestorePreviewCard(
                     ModeChip("Merge", mode == RestoreMode.MERGE) { onMode(RestoreMode.MERGE) }
                     ModeChip("Replace", mode == RestoreMode.REPLACE) { onMode(RestoreMode.REPLACE) }
                 }
+                Spacer(Modifier.height(12.dp))
+                RestoreChangeHighlights(preview.diffFor(mode))
                 Spacer(Modifier.height(14.dp))
-                PrimaryButton(text = "Restore backup", onClick = onRestore)
+                PrimaryButton(text = "Review and restore", onClick = onRestore)
             }
         }
     }
 }
+
+/** Compact category counts plus the first few affected item names. */
+@Composable
+private fun RestoreChangeHighlights(diff: RestoreDiff) {
+    Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        ChangeLine(
+            icon = Icons.Rounded.AddCircle,
+            label = "Added",
+            items = diff.added,
+            tint = BrandMint
+        )
+        ChangeLine(
+            icon = Icons.Rounded.SwapHoriz,
+            label = "Replaced",
+            items = diff.replaced,
+            tint = BrandBlue
+        )
+        ChangeLine(
+            icon = Icons.Rounded.RemoveCircle,
+            label = if (diff.mode == RestoreMode.REPLACE) "Removed"
+            else "Removed (merge keeps current items)",
+            items = diff.removed,
+            tint = if (diff.removedCount > 0) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (diff.unchangedCount > 0) {
+            Text(
+                "${diff.unchangedCount} unchanged item" +
+                    if (diff.unchangedCount == 1) "" else "s",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (!diff.hasChanges) {
+            Text(
+                "This backup matches the current vault; no items will change.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChangeLine(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    items: List<BackupItemChange>,
+    tint: androidx.compose.ui.graphics.Color
+) {
+    Column {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(
+                icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "${items.size}",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = tint
+            )
+        }
+        if (items.isNotEmpty()) {
+            Text(
+                items.take(3).joinToString(" - ") { it.title } +
+                    if (items.size > 3) "  +${items.size - 3} more" else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 24.dp, top = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RestoreReviewDialog(
+    preview: RestorePreview,
+    mode: RestoreMode,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val diff = preview.diffFor(mode)
+    val destructive = mode == RestoreMode.REPLACE
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(28.dp),
+        icon = {
+            androidx.compose.material3.Icon(
+                if (destructive) Icons.Rounded.Warning else Icons.Rounded.Restore,
+                contentDescription = null
+            )
+        },
+        title = { Text(if (destructive) "Replace this vault?" else "Review restore") },
+        text = {
+            Column(
+                Modifier
+                    .heightIn(max = 470.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "${diff.addedCount} added - ${diff.replacedCount} replaced - " +
+                        "${diff.removedCount} removed - ${diff.unchangedCount} unchanged",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (destructive) {
+                        "Every current item and file will be deleted, then the backup will be written in its place. This cannot be undone. The archive checksum is verified again before anything is written."
+                    } else {
+                        "Current items are kept. Missing items are added and newer backup copies replace older ones. The archive checksum is verified again before anything is written."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (destructive) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                RestoreChangeSection("Added", diff.added, BrandMint, Icons.Rounded.AddCircle)
+                RestoreChangeSection("Replaced", diff.replaced, BrandBlue, Icons.Rounded.SwapHoriz)
+                if (destructive) {
+                    RestoreChangeSection(
+                        "Removed",
+                        diff.removed,
+                        MaterialTheme.colorScheme.error,
+                        Icons.Rounded.RemoveCircle
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    if (destructive) "Replace vault" else "Restore",
+                    color = if (destructive) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/** Full, capped list for the review dialog. */
+@Composable
+private fun RestoreChangeSection(
+    title: String,
+    items: List<BackupItemChange>,
+    tint: androidx.compose.ui.graphics.Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Column(Modifier.padding(top = 14.dp)) {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(
+                icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "$title (${items.size})",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (items.isEmpty()) {
+            Text(
+                "None",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 24.dp, top = 4.dp)
+            )
+            return@Column
+        }
+        items.take(MAX_DIFF_ROWS).forEach { item ->
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 24.dp, top = 4.dp)
+            ) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    item.typeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (items.size > MAX_DIFF_ROWS) {
+            Text(
+                "+${items.size - MAX_DIFF_ROWS} more",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 24.dp, top = 4.dp)
+            )
+        }
+    }
+}
+
+private const val MAX_DIFF_ROWS = 50
 
 @Composable
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {

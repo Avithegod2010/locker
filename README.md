@@ -4,12 +4,12 @@
 
 <p><strong>Your offline Android vault for passwords, notes, documents and photos.</strong></p>
 
+<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">⬇️ Download APK v1.11.0</a></strong> · <a href="#quick-start">🚀 Quick start</a> · <a href="#backups-and-recovery">🗝️ Backups and recovery</a> · <a href="SECURITY.md">🛡️ Security policy</a></p>
+
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="locker-hero.png" />
   <img src="locker-hero.gif" width="820" alt="Locker’s blue keypad shield set into an illustrated vault door" />
 </picture>
-
-<p><strong><a href="https://github.com/Avithegod2010/locker/releases/download/v1.11.0/Locker-1.11.0-release.apk">⬇️ Download APK v1.11.0</a></strong> · <a href="#quick-start">🚀 Quick start</a> · <a href="#backups-and-recovery">🗝️ Backups and recovery</a> · <a href="SECURITY.md">🛡️ Security policy</a></p>
 
 <sub>Android 8.0 or newer · On-device encryption · No account required · <a href="https://github.com/Avithegod2010/locker/releases/tag/v1.11.0">Release notes</a></sub>
 

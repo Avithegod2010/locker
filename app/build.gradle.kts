@@ -61,11 +61,12 @@ android {
             buildConfigField("boolean", "DEV_BUILD", "true")
         }
         release {
-            // Hotfix build: R8 is disabled because the build machine repeatedly hit
-            // native memory limits under concurrent builds. Signing and behavior
-            // are identical to a normal release; only the APK size differs.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 is disabled by default because the 8 GB dev machine repeatedly hit
+            // native memory limits. CI can opt in with -PlockerMinifyRelease=true.
+            val minify = (project.findProperty("lockerMinifyRelease") as String?)
+                ?.toBoolean() == true
+            isMinifyEnabled = minify
+            isShrinkResources = minify
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

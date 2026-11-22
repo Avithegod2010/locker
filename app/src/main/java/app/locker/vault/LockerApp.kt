@@ -311,15 +311,20 @@ class AppContainer(context: Context) {
             }
 
             if (isDecoyActive) {
-                // Let the real password open the real vault without touching its failure
-                // counter; wrong guesses are counted against the throwaway decoy only.
-                if (main.session.tryUnlockQuiet(password.copyOf())) {
+                // The real password still opens the real vault from the decoy lock screen.
+                // The attempt counts only once the decoy has refused it too: normal use of the
+                // decoy never burns real-vault attempts, but guessing through this screen is no
+                // longer an uncounted oracle against the real vault.
+                if (main.session.tryUnlockQuiet(password.copyOf(), countFailure = false)) {
                     switchTo(main)
                     password.fill('\u0000')
                     return@withContext UnlockResult.Success
                 }
                 val decoyAttempt = decoy?.session?.unlockWithPassword(password.copyOf())
                 password.fill('\u0000')
+                if (decoyAttempt !is UnlockResult.Success) {
+                    main.session.registerQuietFailure()
+                }
                 return@withContext when (decoyAttempt) {
                     is UnlockResult.Failure -> decoyAttempt
                     else -> UnlockResult.WrongCredentials
@@ -327,13 +332,16 @@ class AppContainer(context: Context) {
             }
 
             if (isHiddenActive) {
-                if (main.session.tryUnlockQuiet(password.copyOf())) {
+                if (main.session.tryUnlockQuiet(password.copyOf(), countFailure = false)) {
                     switchTo(main)
                     password.fill('\u0000')
                     return@withContext UnlockResult.Success
                 }
                 val hiddenAttempt = hidden?.session?.unlockWithPassword(password.copyOf())
                 password.fill('\u0000')
+                if (hiddenAttempt !is UnlockResult.Success) {
+                    main.session.registerQuietFailure()
+                }
                 return@withContext when (hiddenAttempt) {
                     is UnlockResult.Failure -> hiddenAttempt
                     else -> UnlockResult.WrongCredentials

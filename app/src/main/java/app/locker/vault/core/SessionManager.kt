@@ -77,12 +77,6 @@ class SessionManager(
     /** Wired for spaces whose lock-screen password verifier must follow a password change. */
     var onPasswordChanged: ((saltBase64: String, verifierBase64: String) -> Unit)? = null
 
-    /** Wired by the app container to destroy every trace of the real vault on duress. */
-    var onDuressWipe: (suspend () -> Unit)? = null
-
-    /** Wired by the app container to seed the fresh decoy vault with innocuous content. */
-    var onDecoyReady: (suspend () -> Unit)? = null
-
     /** Kept for a short time after a password unlock so an automatic backup can run. */
     private var unlockPasswordCopy: CharArray? = null
 
@@ -235,36 +229,6 @@ class SessionManager(
 
     // --- Duress / decoy vault -------------------------------------------------
 
-    fun hasDuressPassword(): Boolean =
-        preferences.settings.value.duressVerifier.isNotBlank()
-
-    suspend fun setDuressPassword(password: CharArray): Result<Unit> = withContext(Dispatchers.Default) {
-        try {
-            runCatching {
-                if (masterKey == null) error("Unlock the vault first")
-                if (password.size < 10) {
-                    error("Use at least 10 characters for the duress password")
-                }
-                val salt = Crypto.randomBytes(Crypto.SALT_BYTES)
-                val key = Crypto.deriveKey(password, salt, Crypto.currentKdfParams)
-                val verifier = try {
-                    Crypto.sha256(key)
-                } finally {
-                    Crypto.wipe(key)
-                }
-                preferences.setDuressCredentials(
-                    Crypto.b64encode(salt),
-                    Crypto.b64encode(verifier)
-                )
-                Crypto.wipe(verifier)
-            }
-        } finally {
-            password.fill('\u0000')
-        }
-    }
-
-    fun clearDuressPassword() = preferences.clearDuressCredentials()
-
     /** True when this space has a biometric-wrapped payload (main vault only by default). */
     fun hasBiometricPayload(): Boolean = keyMaterialStore.biometricPayload() != null
 
@@ -307,34 +271,6 @@ class SessionManager(
             } catch (_: Exception) {
                 false
             }
-        }
-    }
-
-    /**
-     * Destroys the real vault and immediately creates a fresh decoy vault protected by the
-     * same password that was just typed. The decoy never contains any original data.
-     */
-    private suspend fun performDuressUnlock(password: CharArray): UnlockResult {
-        val wipe = onDuressWipe
-            ?: return UnlockResult.Failure("Duress reset is unavailable")
-        return try {
-            wipe()
-            val created = keyMaterialStore.createVault(password)
-            masterKey?.fill(0)
-            masterKey = created.masterKey
-            _pendingRecoveryCode.value = null
-            failedAttempts = 0
-            preferences.setFailedAttempts(0, failureScope)
-            preferences.setBiometricEnabled(false)
-            preferences.setRecoveryUsed(false)
-            _state.value = SessionState.UNLOCKED
-            runCatching { onVaultCreated?.invoke() }
-            runCatching { onDecoyReady?.invoke() }
-            UnlockResult.DuressUnlocked
-        } catch (t: Throwable) {
-            UnlockResult.Failure(t.message ?: "Duress reset failed")
-        } finally {
-            password.fill('\u0000')
         }
     }
 

@@ -480,9 +480,6 @@ class AppContainer(context: Context) {
         }
     }
 
-    fun hasHiddenPassword(): Boolean =
-        preferences.settings.value.hiddenVerifier.isNotBlank()
-
     /** Creates or replaces a separate hidden vault, unlocked by its own password. */
     suspend fun setHiddenPassword(password: CharArray): Result<Unit> =
         withContext(Dispatchers.Default) {

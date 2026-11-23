@@ -678,35 +678,6 @@ class VaultRepository(
         }
     }
 
-    /**
-     * Turns the per-collection lock on or off. The contents stay encrypted either way; the flag
-     * only controls whether the UI withholds them until the owner authenticates.
-     */
-    suspend fun setCollectionLock(collectionId: String, requireLock: Boolean): Result<Unit> =
-        runCatching {
-            withContext(Dispatchers.IO) {
-                val key = session.requireMasterKey()
-                try {
-                    writeMutex.withLock {
-                        val target = _collections.value.firstOrNull { it.id == collectionId }
-                            ?: error("Collection no longer exists")
-                        db.insertCollection(
-                            collectionId,
-                            target.createdAt,
-                            Crypto.encrypt(
-                                key,
-                                encodeCollection(target.copy(requireLock = requireLock)),
-                                collectionAad(collectionId)
-                            )
-                        )
-                        reload(key)
-                    }
-                } finally {
-                    Crypto.wipe(key)
-                }
-            }
-        }
-
     suspend fun deleteCollection(collectionId: String): Result<Unit> = runCatching {
         withContext(Dispatchers.IO) {
             val key = session.requireMasterKey()
@@ -857,35 +828,8 @@ class VaultRepository(
         _profile.value = VaultProfile()
     }
 
-    fun findItem(id: String): VaultItem? = _items.value.firstOrNull { it.id == id }
-
     fun childrenOf(parentId: String): List<VaultItem> =
         _items.value.filter { it.parentId == parentId }
-
-    fun allTags(): List<String> = _items.value
-        .flatMap { it.tags }
-        .distinct()
-        .sorted()
-
-    suspend fun setTags(itemId: String, tags: List<String>): Result<Unit> = runCatching {
-        withContext(Dispatchers.IO) {
-            val key = session.requireMasterKey()
-            try {
-                writeMutex.withLock {
-                    val row = db.readItems().firstOrNull { it.id == itemId }
-                        ?: error("Item no longer exists")
-                    val current = decodeItem(row, key) ?: error("Could not read item")
-                    upsertItemLocked(
-                        key,
-                        current.copy(tags = cleanTags(tags), updatedAt = System.currentTimeMillis())
-                    )
-                    reload(key)
-                }
-            } finally {
-                Crypto.wipe(key)
-            }
-        }
-    }
 
     /**
      * Renames a tag everywhere, merging into an existing target tag when one already exists.

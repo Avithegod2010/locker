@@ -293,10 +293,6 @@ class EncryptedFileStore(context: Context, dirName: String = "vault") {
         }
     }
 
-    fun cachedThumbnailPathExists(itemId: String): Boolean = thumbnailFile(itemId).exists()
-
-    fun cachedFileExists(itemId: String): Boolean = encryptedFile(itemId).exists()
-
     fun rawFile(itemId: String): File = encryptedFile(itemId)
 
     fun rawThumbnail(itemId: String): File = thumbnailFile(itemId)

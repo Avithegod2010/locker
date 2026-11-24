@@ -127,6 +127,4 @@ object TransferCodec {
     }
 
     fun looksLikeTransfer(text: String): Boolean = text.trim().startsWith(PREFIX)
-
-    fun maxCharacters(): Int = MAX_QR_CHARS
 }

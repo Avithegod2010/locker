@@ -129,19 +129,6 @@ fun rememberHapticClick(): () -> Unit {
 }
 
 @Composable
-fun rememberHapticLongPress(): () -> Unit {
-    val feedback = LocalHapticFeedback.current
-    val settings = rememberSettings()
-    return remember(settings.haptics, feedback) {
-        {
-            if (settings.haptics) {
-                feedback.performHapticFeedback(HapticFeedbackType.LongPress)
-            }
-        }
-    }
-}
-
-@Composable
 fun LockerCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
@@ -774,46 +761,6 @@ fun EmptyState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
-    }
-}
-
-@Composable
-fun FloatingMenuCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String? = null,
-    iconTint: Color = MaterialTheme.colorScheme.primary,
-    onClick: () -> Unit,
-    trailing: @Composable () -> Unit = {}
-) {
-    LockerCard(
-        onClick = onClick,
-        shape = RoundedCornerShape(24.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconTile(icon = icon, tint = iconTint, size = 48.dp)
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                if (subtitle != null) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            trailing()
-        }
     }
 }
 

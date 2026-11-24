@@ -25,8 +25,6 @@ class BiometricKeyStore(context: Context) {
             .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
             BiometricManager.BIOMETRIC_SUCCESS
 
-    fun hasKey(): Boolean = keyStore.containsAlias(KEY_ALIAS)
-
     fun createEnrollmentCipher(): Cipher {
         if (!keyStore.containsAlias(KEY_ALIAS)) {
             generateKey()

@@ -42,13 +42,6 @@ object DisguiseManager {
         else -> "Locker"
     }
 
-    fun iconFor(id: String): String = when (id) {
-        Disguise.ID_CALCULATOR -> "ic_launcher_calculator"
-        Disguise.ID_CALENDAR -> "ic_launcher_calendar"
-        Disguise.ID_NOTES -> "ic_launcher_notes"
-        else -> "ic_launcher"
-    }
-
     /** The activity component that is currently enabled for launcher/shortcut intent use. */
     fun componentFor(context: Context, id: String): ComponentName =
         if (id == Disguise.ID_NONE || aliases[id] == null) {

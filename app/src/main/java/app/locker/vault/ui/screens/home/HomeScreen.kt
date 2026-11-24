@@ -1,8 +1,5 @@
 package app.locker.vault.ui.screens.home
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -105,12 +102,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import app.locker.vault.core.CollectionLocks
-import app.locker.vault.core.Formatting
 import app.locker.vault.core.SharedContent
 import app.locker.vault.core.SortMode
 import app.locker.vault.core.TrialWindow
@@ -140,7 +135,6 @@ import app.locker.vault.ui.theme.BrandMint
 import app.locker.vault.ui.theme.BrandViolet
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -170,8 +164,6 @@ fun HomeScreen(navController: NavController) {
     var saveSearchName by remember { mutableStateOf("") }
     var pickerFor by remember { mutableStateOf<VaultItem?>(null) }
     var importing by remember { mutableStateOf(false) }
-    var pendingCameraFile by remember { mutableStateOf<File?>(null) }
-    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var bulkCollectionOpen by remember { mutableStateOf(false) }
@@ -204,55 +196,6 @@ fun HomeScreen(navController: NavController) {
         closeDrawer()
         if (route != Routes.HOME) {
             navController.navigate(route) { launchSingleTop = true }
-        }
-    }
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        app.session.endExternalActivity()
-        val file = pendingCameraFile
-        val uri = pendingCameraUri
-        pendingCameraFile = null
-        pendingCameraUri = null
-        if (success && file != null && uri != null) {
-            importing = true
-            scope.launch {
-                val result = app.repository.importFile(
-                    uri = uri,
-                    type = VaultType.PHOTO,
-                    title = Formatting.photoTitle(),
-                    collectionIds = emptyList()
-                )
-                file.delete()
-                importing = false
-                snackbarHostState.showSnackbar(
-                    result.fold(
-                        onSuccess = { "Photo encrypted and saved" },
-                        onFailure = { "Could not save photo" }
-                    )
-                )
-            }
-        } else {
-            file?.delete()
-        }
-    }
-
-    fun launchCamera() {
-        app.session.beginExternalActivity()
-        runCatching {
-            val file = app.fileStore.createCameraTempFile()
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.files",
-                file
-            )
-            pendingCameraFile = file
-            pendingCameraUri = uri
-            cameraLauncher.launch(uri)
-        }.onFailure {
-            app.session.endExternalActivity()
-            scope.launch { snackbarHostState.showSnackbar("Camera is unavailable") }
         }
     }
 

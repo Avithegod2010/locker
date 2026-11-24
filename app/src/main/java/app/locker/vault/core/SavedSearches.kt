@@ -72,9 +72,6 @@ object SavedSearches {
     fun update(json: String?, updated: SavedSearch): String =
         encode(parse(json).map { if (it.id == updated.id) updated else it })
 
-    fun setPinned(json: String?, id: String, pinned: Boolean): String =
-        encode(parse(json).map { if (it.id == id) it.copy(pinned = pinned) else it })
-
     fun remove(json: String?, id: String): String =
         encode(parse(json).filterNot { it.id == id })
 }

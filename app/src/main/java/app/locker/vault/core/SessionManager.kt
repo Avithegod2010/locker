@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.crypto.Cipher
 
@@ -56,6 +58,9 @@ class SessionManager(
     private var appInBackground = false
     private var failedAttempts = preferences.failedAttempts(failureScope)
     private var lockEpoch = 0
+
+    /** Serialises the read-modify-write of [failedAttempts] across concurrent guesses. */
+    private val attemptLock = Mutex()
 
     /** Wired by the app container so a freshly created vault gets its starter collections. */
     var onVaultCreated: (suspend () -> Unit)? = null
@@ -128,10 +133,7 @@ class SessionManager(
 
     suspend fun unlockWithPassword(password: CharArray): UnlockResult = withContext(Dispatchers.Default) {
         val epoch = lockEpoch
-        val attempt = failedAttempts + 1
-        failedAttempts = attempt
-        // commit() so force-stopping the process cannot outrun the attempt counter
-        preferences.setFailedAttempts(attempt, failureScope)
+        val attempt = bumpAttempt()
         try {
             val unwrapped = keyMaterialStore.unwrapWithPassword(password)
                 ?: return@withContext registerFailure(attempt)
@@ -152,43 +154,68 @@ class SessionManager(
     }
 
     /**
-     * Verifies a password without touching the failed-attempt counter. Used to let the real
-     * password open the real vault from the decoy's lock screen without risking its
-     * erase-after-N-attempts protection.
+     * Verifies a password without switching to the vault on failure. A wrong guess is still
+     * counted, so a decoy or hidden lock screen cannot be turned into an unlimited oracle
+     * against the real vault. The one caller that must not count immediately (the decoy screen,
+     * where the same guess is also offered to the decoy vault) passes `countFailure = false` and
+     * calls [registerQuietFailure] once the guess has been rejected everywhere.
      */
-    suspend fun tryUnlockQuiet(password: CharArray): Boolean = withContext(Dispatchers.Default) {
+    suspend fun tryUnlockQuiet(
+        password: CharArray,
+        countFailure: Boolean = true
+    ): Boolean = withContext(Dispatchers.Default) {
         val epoch = lockEpoch
-        try {
-            val unwrapped = keyMaterialStore.unwrapWithPassword(password) ?: return@withContext false
-            if (lockEpoch != epoch) {
-                Crypto.wipe(unwrapped)
-                return@withContext false
+        val unlocked = try {
+            val unwrapped = keyMaterialStore.unwrapWithPassword(password)
+            when {
+                unwrapped == null -> false
+                lockEpoch != epoch -> {
+                    Crypto.wipe(unwrapped)
+                    false
+                }
+                else -> {
+                    rememberPasswordForBackup(password)
+                    completeUnlock(unwrapped, viaRecovery = false)
+                    true
+                }
             }
-            rememberPasswordForBackup(password)
-            completeUnlock(unwrapped, viaRecovery = false)
-            true
         } catch (_: Throwable) {
             false
         } finally {
             password.fill('\u0000')
         }
+        if (!unlocked && countFailure) applyFailurePolicy(bumpAttempt())
+        unlocked
     }
 
     /**
-     * Verifies the vault password without changing session state or touching the failed-attempt
-     * counter. Used by per-collection locks on devices without an enrolled biometric.
+     * Verifies the vault password without changing session state. Wrong guesses are counted
+     * exactly like the lock screen, so a per-collection gate is not a place to brute-force the
+     * password without touching erase-after-N-attempts; a correct password clears the counter it
+     * just proved.
      */
-    suspend fun verifyPasswordQuiet(password: CharArray): Boolean = withContext(Dispatchers.Default) {
-        try {
-            val master = keyMaterialStore.unwrapWithPassword(password) ?: return@withContext false
-            Crypto.wipe(master)
-            true
-        } catch (_: Throwable) {
-            false
-        } finally {
-            password.fill('\u0000')
+    suspend fun verifyPasswordQuiet(password: CharArray): Boolean =
+        withContext(Dispatchers.Default) {
+            val verified = try {
+                val master = keyMaterialStore.unwrapWithPassword(password)
+                if (master != null) {
+                    Crypto.wipe(master)
+                    true
+                } else {
+                    false
+                }
+            } catch (_: Throwable) {
+                false
+            } finally {
+                password.fill('\u0000')
+            }
+            if (verified) {
+                resetFailedAttempts()
+            } else {
+                applyFailurePolicy(bumpAttempt())
+            }
+            verified
         }
-    }
 
     suspend fun unlockWithRecovery(input: String): UnlockResult = withContext(Dispatchers.Default) {        val epoch = lockEpoch
         try {
@@ -256,7 +283,9 @@ class SessionManager(
                 salt + password.concatToString().toByteArray(Charsets.UTF_8)
             )
             try {
-                actual.contentEquals(expected)
+                // Constant-time: contentEquals short-circuits on the first differing
+                // byte, which leaks how much of a guess matched.
+                java.security.MessageDigest.isEqual(actual, expected)
             } finally {
                 Crypto.wipe(actual)
                 Crypto.wipe(expected)
@@ -270,7 +299,7 @@ class SessionManager(
                     Crypto.wipe(key)
                 }
                 try {
-                    actual.contentEquals(expected)
+                    java.security.MessageDigest.isEqual(actual, expected)
                 } finally {
                     Crypto.wipe(actual)
                     Crypto.wipe(expected)
@@ -555,15 +584,56 @@ class SessionManager(
         onUnlocked?.invoke()
     }
 
-    private suspend fun registerFailure(attempt: Int): UnlockResult {
+    /**
+     * Counts a wrong password that a decoy or hidden lock screen offered to the real vault and
+     * that was refused by every space, so the real vault still reaches erase-after-N-attempts.
+     * Callers that pass `countFailure = false` to [tryUnlockQuiet] must call this themselves.
+     */
+    suspend fun registerQuietFailure() {
+        withContext(Dispatchers.Default) {
+            applyFailurePolicy(bumpAttempt())
+        }
+    }
+
+    /**
+     * Increments and commits the attempt counter before the comparison runs, so force-stopping
+     * the process cannot outrun it ([AppPreferences.setFailedAttempts] commits synchronously),
+     * and holds [attemptLock] so two concurrent guesses cannot lose an increment.
+     */
+    private suspend fun bumpAttempt(): Int = attemptLock.withLock {
+        val attempt = failedAttempts + 1
+        failedAttempts = attempt
+        preferences.setFailedAttempts(attempt, failureScope)
+        attempt
+    }
+
+    /**
+     * Applies erase-after-N-attempts and progressive backoff to a failed attempt. Returns the
+     * threshold that was crossed, or 0 when the vault is kept.
+     */
+    private suspend fun applyFailurePolicy(attempt: Int): Int {
         val threshold = preferences.settings.value.wipeAfterAttempts
         if (threshold > 0 && attempt >= threshold) {
             onWipeRequired?.invoke()
-            return UnlockResult.Failure("Vault erased after $threshold failed attempts")
+            return threshold
         }
         // Gentle progressive backoff; the committed counter is the real defense.
         delay((attempt.coerceAtMost(5) * 250L))
-        return UnlockResult.WrongCredentials
+        return 0
+    }
+
+    private fun resetFailedAttempts() {
+        failedAttempts = 0
+        preferences.setFailedAttempts(0, failureScope)
+    }
+
+    private suspend fun registerFailure(attempt: Int): UnlockResult {
+        val threshold = applyFailurePolicy(attempt)
+        return if (threshold > 0) {
+            UnlockResult.Failure("Vault erased after $threshold failed attempts")
+        } else {
+            UnlockResult.WrongCredentials
+        }
     }
 }
 
